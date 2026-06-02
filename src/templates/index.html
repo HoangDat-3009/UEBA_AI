@@ -7,6 +7,7 @@
     <title>🛡️ UEBA Dashboard — Insider Threat Detection</title>
     <link rel="stylesheet" href="/static/style.css" />
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
 <body>
 
@@ -48,6 +49,36 @@
             <span class="last-updated" id="lastUpdated"></span>
         </div>
     </header>
+
+    <!-- ==================== TABS ==================== -->
+    <div class="tab-menu animate-in delay-1">
+        <button class="tab-btn active" id="btnTabBatch" onclick="switchTab('batch')">📊 Phân tích & Lịch sử</button>
+        <button class="tab-btn" id="btnTabRealtime" onclick="switchTab('realtime')"><span class="live-dot"></span> Live Threat Feed</button>
+        <button class="btn-refresh" style="margin-left:auto; background:var(--gradient-danger);" onclick="runOfflineProfile()">⚙️ Chạy Baseline Profiling</button>
+    </div>
+
+    <div id="tabBatch" class="tab-pane active">
+
+    <!-- ==================== DATE FILTER BAR ==================== -->
+    <div class="filter-bar animate-in delay-2">
+        <div class="filter-label">
+            <span class="filter-icon">📅</span>
+            Lọc theo ngày
+        </div>
+        <input type="date" class="date-input" id="filterDateFrom" />
+        <span style="color:var(--text-muted); font-size:12px;">→</span>
+        <input type="date" class="date-input" id="filterDateTo" />
+        <button class="btn-filter btn-filter-primary" onclick="applyDateFilter()">
+            🔍 Lọc
+        </button>
+        <button class="btn-filter btn-filter-secondary" onclick="clearDateFilter()">
+            ✕ Xem tất cả
+        </button>
+        <div class="filter-separator"></div>
+        <div class="filter-info" id="filterInfo">
+            Đang xem: <span class="badge" id="filterBadge">Tất cả</span>
+        </div>
+    </div>
 
     <!-- ==================== SUMMARY CARDS ==================== -->
     <div class="summary-grid" id="summaryGrid">
@@ -153,6 +184,139 @@
         </div>
     </div>
 
+    <!-- ==================== ALERT HISTORY SECTION ==================== -->
+    <div style="margin-top: 8px;">
+        <!-- Stats Mini Cards -->
+        <div class="stats-mini-grid" id="historyStatsGrid">
+            <div class="stats-mini-card">
+                <div class="stats-mini-icon icon-total">📋</div>
+                <div class="stats-mini-info">
+                    <div class="stats-mini-value val-blue" id="histTotalAlerts">0</div>
+                    <div class="stats-mini-label">Tổng cảnh báo</div>
+                </div>
+            </div>
+            <div class="stats-mini-card">
+                <div class="stats-mini-icon icon-critical">🔴</div>
+                <div class="stats-mini-info">
+                    <div class="stats-mini-value val-red" id="histCriticalCount">0</div>
+                    <div class="stats-mini-label">Nghiêm trọng (Critical)</div>
+                </div>
+            </div>
+            <div class="stats-mini-card">
+                <div class="stats-mini-icon icon-users">👤</div>
+                <div class="stats-mini-info">
+                    <div class="stats-mini-value val-amber" id="histUniqueUsers">0</div>
+                    <div class="stats-mini-label">Người dùng bị cảnh báo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Charts: Timeline + Severity -->
+        <div class="history-charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">
+                            <span class="chart-title-icon">📈</span>
+                            Timeline cảnh báo
+                        </div>
+                        <div class="chart-subtitle">Số lượng cảnh báo theo thời gian — cập nhật real-time</div>
+                    </div>
+                </div>
+                <div class="chart-container" id="histTimelineChart" style="min-height:300px;"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">
+                            <span class="chart-title-icon">🎯</span>
+                            Phân bố mức độ
+                        </div>
+                        <div class="chart-subtitle">Tỷ lệ CRITICAL vs HIGH</div>
+                    </div>
+                </div>
+                <div class="chart-container" id="histSeverityChart" style="min-height:300px;"></div>
+            </div>
+        </div>
+
+        <!-- History Alert Table -->
+        <div class="threats-section">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">
+                        <span class="chart-title-icon">📜</span>
+                        Lịch sử cảnh báo chi tiết
+                    </div>
+                    <div class="chart-subtitle">Toàn bộ cảnh báo đã ghi nhận, cập nhật real-time khi có alert mới</div>
+                </div>
+            </div>
+            <div class="table-wrapper history-alert-table">
+                <table class="threats-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Thời gian</th>
+                            <th style="width: 12%">Mức độ</th>
+                            <th style="width: 12%">User ID</th>
+                            <th style="width: 10%">Điểm</th>
+                            <th style="width: 51%">Phân tích nguyên nhân</th>
+                        </tr>
+                    </thead>
+                    <tbody id="histAlertsBody">
+                        <tr><td colspan="5">
+                            <div class="no-data-placeholder">
+                                <div class="no-data-icon">📭</div>
+                                <div class="no-data-text">Chưa có cảnh báo nào</div>
+                                <div class="no-data-hint">Dữ liệu sẽ tự động cập nhật khi hệ thống phát hiện hành vi bất thường</div>
+                            </div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    </div> <!-- End tabBatch -->
+
+    <div id="tabRealtime" class="tab-pane">
+        <div class="summary-grid">
+            <div class="summary-card card-anomaly">
+                <div class="card-icon">🔴</div>
+                <div class="card-value" id="rtAlertCount">0</div>
+                <div class="card-label">Cảnh báo Live mới</div>
+            </div>
+            <div class="summary-card card-total">
+                <div class="card-icon">⚡</div>
+                <div class="card-value" id="rtDetectorStatus">Đang chạy</div>
+                <div class="card-label">Trạng thái Online Detector</div>
+            </div>
+        </div>
+        
+        <div class="threats-section">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title"><span class="chart-title-icon">🚨</span> Live Alert Feed</div>
+                    <div class="chart-subtitle">Cảnh báo tự động đẩy về từ hệ thống Online Detection</div>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="threats-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%">Thời gian</th>
+                            <th style="width: 15%">Mức độ</th>
+                            <th style="width: 15%">User ID</th>
+                            <th style="width: 10%">Điểm</th>
+                            <th style="width: 45%">Phân tích nguyên nhân (Chi tiết sai lệch)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rtAlertsBody">
+                        <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);">Đang lắng nghe log real-time...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div> <!-- End tabRealtime -->
+
     <!-- ==================== FOOTER ==================== -->
     <footer class="footer">
         UEBA Multi-Log Correlation Dashboard &bull; Powered by Isolation Forest &amp; PCA &bull; Built with ❤️ for SOC Analysts
@@ -166,6 +330,9 @@
 // ===========================================================================
 let autoRefreshInterval = null;
 let dashboardData = null;
+let historyData = null;
+let currentDateFrom = null;
+let currentDateTo = null;
 
 // Plotly shared layout defaults (dark theme)
 const PLOTLY_LAYOUT_BASE = {
@@ -196,6 +363,40 @@ const PLOTLY_CONFIG = {
 async function fetchData() {
     const resp = await fetch('/api/data');
     return resp.json();
+}
+
+async function fetchAlerts() {
+    try {
+        const resp = await fetch('/api/alerts?limit=50');
+        const data = await resp.json();
+        if (data.alerts && data.alerts.length > 0) {
+            // Track known IDs to avoid duplicates in polling
+            data.alerts.forEach(alert => {
+                if (alert.id) {
+                    knownAlertIds.add(alert.id);
+                    if (alert.id > lastKnownAlertId) lastKnownAlertId = alert.id;
+                }
+            });
+
+            // Reverse so oldest is added first, meaning newest will be at top when we prepend
+            data.alerts.reverse().forEach(alert => {
+                const formattedAlert = {
+                    timestamp: alert.timestamp,
+                    severity: alert.severity,
+                    user_id: alert.user_id,
+                    anomaly_score: alert.anomaly_score,
+                    description: alert.description,
+                    deviations: alert.feature_deviations
+                };
+                renderSingleAlert(formattedAlert, false);
+            });
+        } else {
+            const tbody = document.getElementById('rtAlertsBody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);">Chưa có cảnh báo nào trong DB. Đang lắng nghe log real-time...</td></tr>';
+        }
+    } catch (e) {
+        console.error('Fetch alerts failed:', e);
+    }
 }
 
 async function refreshData() {
@@ -567,8 +768,12 @@ function renderThreatsTable(data) {
 // ===========================================================================
 // Auto-refresh
 // ===========================================================================
+let historyRefreshInterval = null;
+let liveAlertsPollInterval = null;
+
 function startAutoRefresh() {
     stopAutoRefresh();
+    // Refresh batch data every 30s
     autoRefreshInterval = setInterval(async () => {
         try {
             const data = await fetchData();
@@ -577,12 +782,38 @@ function startAutoRefresh() {
             console.error('Auto-refresh error:', e);
         }
     }, 30000);
+
+    // Refresh history charts every 15s
+    historyRefreshInterval = setInterval(async () => {
+        try {
+            await fetchHistory(currentDateFrom, currentDateTo);
+        } catch (e) {
+            console.error('History refresh error:', e);
+        }
+    }, 15000);
+
+    // Poll live alerts from DB every 10s (fallback for WebSocket)
+    liveAlertsPollInterval = setInterval(async () => {
+        try {
+            await pollLiveAlerts();
+        } catch (e) {
+            console.error('Live alerts poll error:', e);
+        }
+    }, 10000);
 }
 
 function stopAutoRefresh() {
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
+    }
+    if (historyRefreshInterval) {
+        clearInterval(historyRefreshInterval);
+        historyRefreshInterval = null;
+    }
+    if (liveAlertsPollInterval) {
+        clearInterval(liveAlertsPollInterval);
+        liveAlertsPollInterval = null;
     }
 }
 
@@ -595,13 +826,482 @@ document.getElementById('autoRefreshToggle').addEventListener('change', function
 });
 
 // ===========================================================================
+// Real-time Logic (WebSocket)
+// ===========================================================================
+const socket = io();
+let rtAlertCount = 0;
+
+socket.on('connect', () => {
+    console.log('Connected to Real-time Stream');
+    document.getElementById('rtDetectorStatus').textContent = 'Kết nối (Online)';
+});
+
+socket.on('disconnect', () => {
+    document.getElementById('rtDetectorStatus').textContent = 'Mất kết nối (Offline)';
+});
+
+socket.on('new_alert', (alertData) => {
+    renderSingleAlert(alertData, true);
+    // Also update the history tab in real-time
+    injectAlertIntoHistory(alertData);
+});
+
+// Track last known alert ID so polling doesn't add duplicates
+let lastKnownAlertId = 0;
+let knownAlertIds = new Set();
+
+async function pollLiveAlerts() {
+    try {
+        const resp = await fetch('/api/alerts?limit=20');
+        const data = await resp.json();
+        if (!data.alerts || data.alerts.length === 0) return;
+
+        const tbody = document.getElementById('rtAlertsBody');
+
+        // Process alerts newest first, check for duplicates
+        let newAlertsFound = false;
+        data.alerts.forEach(alert => {
+            const alertId = alert.id;
+            if (alertId && !knownAlertIds.has(alertId)) {
+                knownAlertIds.add(alertId);
+                newAlertsFound = true;
+
+                const formattedAlert = {
+                    timestamp: alert.timestamp,
+                    severity: alert.severity,
+                    user_id: alert.user_id,
+                    anomaly_score: alert.anomaly_score,
+                    description: alert.description,
+                    deviations: alert.feature_deviations
+                };
+
+                // Only render if this is truly new (not from initial load)
+                if (lastKnownAlertId > 0 && alertId > lastKnownAlertId) {
+                    renderSingleAlert(formattedAlert, true);
+                    injectAlertIntoHistory(formattedAlert);
+                }
+            }
+        });
+
+        // Update the high-water mark
+        const maxId = Math.max(...data.alerts.map(a => a.id || 0));
+        if (maxId > lastKnownAlertId) lastKnownAlertId = maxId;
+
+    } catch (e) {
+        console.error('Poll alerts error:', e);
+    }
+}
+
+function renderSingleAlert(alertData, isNew) {
+    if (isNew) {
+        rtAlertCount++;
+        document.getElementById('rtAlertCount').textContent = rtAlertCount;
+    }
+    
+    const tbody = document.getElementById('rtAlertsBody');
+    if(tbody.querySelector('td[colspan]')) {
+        tbody.innerHTML = ''; // Clear empty message
+    }
+    
+    const FEATURE_NAMES_VI = {
+        "total_logins": "Số lần đăng nhập",
+        "off_hour_logins": "Đăng nhập ngoài giờ",
+        "total_usb_connects": "Số lần cắm USB",
+        "off_hour_usb": "Cắm USB ngoài giờ",
+        "total_emails": "Số email gửi đi",
+        "external_emails": "Gửi email ra ngoài (External)",
+        "total_file_access": "Số lần truy cập file",
+        "exe_zip_downloads": "Tải file EXE/ZIP"
+    };
+
+    // Format deviations
+    let devHTML = '<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">';
+    if (alertData.deviations) {
+        for (const [feat, data] of Object.entries(alertData.deviations)) {
+            const featVi = FEATURE_NAMES_VI[feat] || feat;
+            devHTML += `<div style="background:rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 6px 10px; border-radius: 0 4px 4px 0;">
+                <div style="color: #fca5a5; font-weight: 600; margin-bottom: 2px;">${featVi}</div>
+                <div style="font-size: 11px;">
+                    <span style="color: #fff;">Ghi nhận: <b>${data.observed}</b></span> 
+                    <span style="color: #94a3b8; margin-left: 4px;">(Thông thường: ${data.mean} | Vượt ngưỡng: ${data.deviation_sigma}σ)</span>
+                </div>
+            </div>`;
+        }
+    }
+    devHTML += '</div>';
+    
+    const badgeClass = alertData.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
+    const severityLabel = alertData.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+    
+    const tr = document.createElement('tr');
+    tr.style.animation = 'fadeInUp 0.5s ease-out';
+    tr.innerHTML = `
+        <td style="color:#8b95a8; white-space:nowrap;">${alertData.timestamp}</td>
+        <td><span class="rank-badge ${badgeClass}">${severityLabel}</span></td>
+        <td class="user-id" style="font-weight:bold; color:#60a5fa;">${alertData.user_id}</td>
+        <td class="score-value">${alertData.anomaly_score.toFixed(4)}</td>
+        <td style="font-size:12px; padding: 12px 16px;">
+            <div style="font-weight: bold; color: #e2e8f0;">${alertData.description || 'Phát hiện hành vi dị thường so với baseline'}</div>
+            ${devHTML}
+        </td>
+    `;
+    
+    tbody.insertBefore(tr, tbody.firstChild);
+    
+    // Optional: play sound
+    // new Audio('/static/alert.mp3').play().catch(e=>{});
+}
+
+async function runOfflineProfile() {
+    if(!confirm("Chạy Baseline Profiling sẽ đọc toàn bộ log lịch sử và train lại model. Chạy ngay?")) return;
+    const btn = document.querySelector('.btn-refresh[onclick="runOfflineProfile()"]');
+    btn.textContent = "⏳ Đang chạy...";
+    try {
+        const resp = await fetch('/api/offline/run', { method: 'POST' });
+        const res = await resp.json();
+        alert(res.message || "Hoàn tất Profiling.");
+    } catch(e) {
+        alert("Lỗi khi chạy profiling!");
+    } finally {
+        btn.textContent = "⚙️ Chạy Baseline Profiling";
+    }
+}
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    
+    if(tabId === 'batch') {
+        document.getElementById('tabBatch').classList.add('active');
+        document.getElementById('btnTabBatch').classList.add('active');
+    } else {
+        document.getElementById('tabRealtime').classList.add('active');
+        document.getElementById('btnTabRealtime').classList.add('active');
+    }
+}
+
+// ===========================================================================
+// History Section: Date filter, Timeline chart, Severity chart, Alert table
+// ===========================================================================
+
+async function fetchHistory(dateFrom, dateTo) {
+    let url = '/api/alerts/history';
+    const params = [];
+    if (dateFrom) params.push(`from=${dateFrom}`);
+    if (dateTo) params.push(`to=${dateTo}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
+    try {
+        const resp = await fetch(url);
+        historyData = await resp.json();
+        renderHistorySection(historyData);
+    } catch (e) {
+        console.error('Fetch history failed:', e);
+    }
+}
+
+function applyDateFilter() {
+    const from = document.getElementById('filterDateFrom').value;
+    const to = document.getElementById('filterDateTo').value;
+    currentDateFrom = from || null;
+    currentDateTo = to || null;
+
+    // Update filter badge
+    const badge = document.getElementById('filterBadge');
+    if (from && to) {
+        badge.textContent = `${from} → ${to}`;
+    } else if (from) {
+        badge.textContent = `Từ ${from}`;
+    } else if (to) {
+        badge.textContent = `Đến ${to}`;
+    } else {
+        badge.textContent = 'Tất cả';
+    }
+
+    fetchHistory(currentDateFrom, currentDateTo);
+}
+
+function clearDateFilter() {
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    currentDateFrom = null;
+    currentDateTo = null;
+    document.getElementById('filterBadge').textContent = 'Tất cả';
+    fetchHistory(null, null);
+}
+
+function renderHistorySection(data) {
+    if (!data) return;
+
+    // Stats mini cards
+    const total = data.total || 0;
+    const critical = data.stats?.severity?.CRITICAL || 0;
+    const uniqueUsers = data.stats?.top_users?.labels?.length || 0;
+
+    document.getElementById('histTotalAlerts').textContent = total;
+    document.getElementById('histCriticalCount').textContent = critical;
+    document.getElementById('histUniqueUsers').textContent = uniqueUsers;
+
+    // Timeline chart
+    renderHistoryTimeline(data.stats);
+    // Severity chart
+    renderHistorySeverity(data.stats);
+    // Alert table
+    renderHistoryAlertTable(data.alerts || []);
+}
+
+function renderHistoryTimeline(stats) {
+    if (!stats || !stats.timeline_labels || stats.timeline_labels.length === 0) {
+        Plotly.newPlot('histTimelineChart', [], {
+            ...PLOTLY_LAYOUT_BASE,
+            annotations: [{
+                text: 'Chưa có dữ liệu cảnh báo',
+                xref: 'paper', yref: 'paper',
+                x: 0.5, y: 0.5, showarrow: false,
+                font: { size: 14, color: '#5a6478' }
+            }]
+        }, PLOTLY_CONFIG);
+        return;
+    }
+
+    const trace = {
+        x: stats.timeline_labels,
+        y: stats.timeline_values,
+        type: 'scatter',
+        mode: 'lines+markers',
+        fill: 'tozeroy',
+        fillcolor: 'rgba(59, 130, 246, 0.08)',
+        line: {
+            color: '#3b82f6',
+            width: 2.5,
+            shape: 'spline',
+        },
+        marker: {
+            color: '#3b82f6',
+            size: 6,
+            line: { width: 1, color: '#fff' },
+        },
+        hovertemplate: '<b>%{x}</b><br>Cảnh báo: %{y}<extra></extra>',
+    };
+
+    const layout = {
+        ...PLOTLY_LAYOUT_BASE,
+        xaxis: {
+            ...PLOTLY_LAYOUT_BASE.xaxis,
+            title: { text: 'Thời gian', font: { size: 11 } },
+            tickfont: { size: 9, family: 'JetBrains Mono' },
+            tickangle: -45,
+        },
+        yaxis: {
+            ...PLOTLY_LAYOUT_BASE.yaxis,
+            title: { text: 'Số cảnh báo', font: { size: 11 } },
+            dtick: 1,
+        },
+        showlegend: false,
+        margin: { l: 48, r: 16, t: 16, b: 72 },
+    };
+
+    Plotly.newPlot('histTimelineChart', [trace], layout, PLOTLY_CONFIG);
+}
+
+function renderHistorySeverity(stats) {
+    if (!stats || (!stats.severity?.CRITICAL && !stats.severity?.HIGH)) {
+        Plotly.newPlot('histSeverityChart', [], {
+            ...PLOTLY_LAYOUT_BASE,
+            annotations: [{
+                text: 'Chưa có dữ liệu',
+                xref: 'paper', yref: 'paper',
+                x: 0.5, y: 0.5, showarrow: false,
+                font: { size: 14, color: '#5a6478' }
+            }]
+        }, PLOTLY_CONFIG);
+        return;
+    }
+
+    const critVal = stats.severity.CRITICAL || 0;
+    const highVal = stats.severity.HIGH || 0;
+
+    const trace = {
+        labels: ['NGHIÊM TRỌNG', 'CẢNH BÁO'],
+        values: [critVal, highVal],
+        type: 'pie',
+        hole: 0.55,
+        marker: {
+            colors: ['#ef4444', '#f97316'],
+            line: { color: '#111827', width: 2 },
+        },
+        textinfo: 'label+value',
+        textposition: 'outside',
+        textfont: { size: 11, color: '#e8ecf4', family: 'Inter' },
+        hovertemplate: '<b>%{label}</b><br>Số lượng: %{value}<br>Tỷ lệ: %{percent}<extra></extra>',
+        pull: [0.03, 0],
+    };
+
+    const layout = {
+        ...PLOTLY_LAYOUT_BASE,
+        showlegend: true,
+        legend: {
+            x: 0.5, y: -0.1, xanchor: 'center',
+            orientation: 'h',
+            bgcolor: 'rgba(0,0,0,0)',
+            font: { color: '#8b95a8', size: 11 },
+        },
+        margin: { l: 16, r: 16, t: 16, b: 40 },
+        annotations: [{
+            text: `<b>${critVal + highVal}</b><br>tổng`,
+            x: 0.5, y: 0.5, showarrow: false,
+            font: { size: 18, color: '#e8ecf4', family: 'JetBrains Mono' },
+        }],
+    };
+
+    Plotly.newPlot('histSeverityChart', [trace], layout, PLOTLY_CONFIG);
+}
+
+function renderHistoryAlertTable(alerts) {
+    const tbody = document.getElementById('histAlertsBody');
+
+    if (!alerts || alerts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5">
+            <div class="no-data-placeholder">
+                <div class="no-data-icon">📭</div>
+                <div class="no-data-text">Không có cảnh báo trong khoảng thời gian này</div>
+                <div class="no-data-hint">Thử chọn khoảng ngày khác hoặc xem tất cả</div>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    const FEATURE_NAMES_VI = {
+        "total_logins": "Số lần đăng nhập",
+        "off_hour_logins": "Đăng nhập ngoài giờ",
+        "total_usb_connects": "Số lần cắm USB",
+        "off_hour_usb": "Cắm USB ngoài giờ",
+        "total_emails": "Số email gửi đi",
+        "external_emails": "Gửi email ra ngoài (External)",
+        "total_file_access": "Số lần truy cập file",
+        "exe_zip_downloads": "Tải file EXE/ZIP"
+    };
+
+    let html = '';
+    alerts.forEach(a => {
+        const deviations = a.feature_deviations || {};
+        let devHTML = '';
+        if (Object.keys(deviations).length > 0) {
+            devHTML = '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">';
+            for (const [feat, data] of Object.entries(deviations)) {
+                const featVi = FEATURE_NAMES_VI[feat] || feat;
+                devHTML += `<div style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding:4px 8px;border-radius:0 4px 4px 0;">
+                    <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featVi}</span>
+                    <span style="font-size:10px;color:#94a3b8;"> — Ghi nhận: <b style="color:#fff">${data.observed}</b> (TB: ${data.mean} | ${data.deviation_sigma}σ)</span>
+                </div>`;
+            }
+            devHTML += '</div>';
+        }
+
+        const badgeClass = a.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
+        const severityLabel = a.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+
+        html += `<tr>
+            <td style="color:#8b95a8;white-space:nowrap;font-size:11px;">${a.timestamp}</td>
+            <td><span class="rank-badge ${badgeClass}" style="font-size:10px;width:auto;padding:4px 10px;">${severityLabel}</span></td>
+            <td class="user-id" style="font-weight:bold;color:#60a5fa;">${a.user_id}</td>
+            <td class="score-value" style="font-size:11px;">${a.anomaly_score?.toFixed(4) || '—'}</td>
+            <td style="font-size:12px;padding:10px 14px;white-space:normal;">
+                <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${a.description || 'Phát hiện hành vi dị thường'}</div>
+                ${devHTML}
+            </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+}
+
+// When a new real-time alert arrives, also inject into the history tab
+function injectAlertIntoHistory(alertData) {
+    // If a date filter is active, check if this alert falls within range
+    if (currentDateFrom || currentDateTo) {
+        const alertDate = alertData.timestamp?.substring(0, 10);
+        if (currentDateFrom && alertDate < currentDateFrom) return;
+        if (currentDateTo && alertDate > currentDateTo) return;
+    }
+
+    // Add to table
+    const tbody = document.getElementById('histAlertsBody');
+    if (tbody.querySelector('.no-data-placeholder')) {
+        tbody.innerHTML = '';
+    }
+
+    const FEATURE_NAMES_VI = {
+        "total_logins": "Số lần đăng nhập",
+        "off_hour_logins": "Đăng nhập ngoài giờ",
+        "total_usb_connects": "Số lần cắm USB",
+        "off_hour_usb": "Cắm USB ngoài giờ",
+        "total_emails": "Số email gửi đi",
+        "external_emails": "Gửi email ra ngoài (External)",
+        "total_file_access": "Số lần truy cập file",
+        "exe_zip_downloads": "Tải file EXE/ZIP"
+    };
+
+    const deviations = alertData.deviations || {};
+    let devHTML = '';
+    if (Object.keys(deviations).length > 0) {
+        devHTML = '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">';
+        for (const [feat, data] of Object.entries(deviations)) {
+            const featVi = FEATURE_NAMES_VI[feat] || feat;
+            devHTML += `<div style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding:4px 8px;border-radius:0 4px 4px 0;">
+                <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featVi}</span>
+                <span style="font-size:10px;color:#94a3b8;"> — Ghi nhận: <b style="color:#fff">${data.observed}</b> (TB: ${data.mean} | ${data.deviation_sigma}σ)</span>
+            </div>`;
+        }
+        devHTML += '</div>';
+    }
+
+    const badgeClass = alertData.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
+    const severityLabel = alertData.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+
+    const tr = document.createElement('tr');
+    tr.className = 'alert-row-new';
+    tr.innerHTML = `
+        <td style="color:#8b95a8;white-space:nowrap;font-size:11px;">${alertData.timestamp}</td>
+        <td><span class="rank-badge ${badgeClass}" style="font-size:10px;width:auto;padding:4px 10px;">${severityLabel}</span></td>
+        <td class="user-id" style="font-weight:bold;color:#60a5fa;">${alertData.user_id}</td>
+        <td class="score-value" style="font-size:11px;">${alertData.anomaly_score?.toFixed(4) || '—'}</td>
+        <td style="font-size:12px;padding:10px 14px;white-space:normal;">
+            <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${alertData.description || 'Phát hiện hành vi dị thường'}</div>
+            ${devHTML}
+        </td>
+    `;
+    tbody.insertBefore(tr, tbody.firstChild);
+
+    // Update stats incrementally
+    const totalEl = document.getElementById('histTotalAlerts');
+    totalEl.textContent = parseInt(totalEl.textContent || '0') + 1;
+    if (alertData.severity === 'CRITICAL') {
+        const critEl = document.getElementById('histCriticalCount');
+        critEl.textContent = parseInt(critEl.textContent || '0') + 1;
+    }
+
+    // Re-fetch history charts (lightweight, ensures accuracy)
+    fetchHistory(currentDateFrom, currentDateTo);
+}
+
+// ===========================================================================
 // Init
 // ===========================================================================
+
+// Set default date filter to today
+(function setDefaultDates() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('filterDateTo').value = today;
+})();
+
 (async function init() {
     try {
         const data = await fetchData();
         renderAll(data);
         startAutoRefresh();
+        await fetchAlerts(); // Load historical alerts for Live Threat Feed tab
+        await fetchHistory(null, null); // Load all history for Lịch sử tab
     } catch (e) {
         console.error('Init failed:', e);
     }

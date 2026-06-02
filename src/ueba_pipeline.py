@@ -697,6 +697,21 @@ class UEBAPipeline:
             "feature_averages": feature_averages,
         }
 
+    # -----------------------------------------------------------------------
+    # Export Models
+    # -----------------------------------------------------------------------
+
+    def export_model(self, model_path: str, scaler_path: str):
+        """Export the trained Isolation Forest and MinMaxScaler to disk."""
+        import joblib
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+        os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+        joblib.dump(self.model, model_path)
+        joblib.dump(self.scaler, scaler_path)
+        logger.info("Exported model to %s and scaler to %s", model_path, scaler_path)
+
+
 
 # ===========================================================================
 # MAIN EXECUTION

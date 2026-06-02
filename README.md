@@ -1,14 +1,14 @@
 <p align="center">
   <h1 align="center">🛡️ Enterprise UEBA dựa trên Trí tuệ Nhân tạo (AI-Driven Enterprise UEBA)</h1>
   <p align="center">
-    <strong>Hệ thống Phát hiện Mối đe dọa Nội bộ (Insider Threat Detection) &amp; Liên kết Đa nhật ký bằng Học máy</strong>
+    <strong>Hệ thống Phát hiện Mối đe dọa Nội bộ (Insider Threat Detection) &amp; Phân tích Thời gian thực (Real-time SOC)</strong>
   </p>
   <p align="center">
     <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/scikit--learn-1.4.0-F7931E?logo=scikit-learn&logoColor=white" alt="scikit-learn" />
     <img src="https://img.shields.io/badge/Flask-3.0%2B-000?logo=flask&logoColor=white" alt="Flask" />
+    <img src="https://img.shields.io/badge/Socket.IO-Real--time-010101?logo=socket.io&logoColor=white" alt="Socket.IO" />
     <img src="https://img.shields.io/badge/Plotly.js-2.32-3F4F75?logo=plotly&logoColor=white" alt="Plotly.js" />
-    <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" />
   </p>
 </p>
 
@@ -16,75 +16,46 @@
 
 ## 📋 Mục tiêu & Tóm tắt Dự án
 
-**UEBA (User and Entity Behavior Analytics)** là thành phần then chốt trong các Trung tâm Giám sát An ninh mạng (SOC). Các công cụ SIEM truyền thống dựa trên luật thường tạo ra nhiều cảnh báo giả do phân tích từng nguồn nhật ký độc lập.
+**UEBA (User and Entity Behavior Analytics)** là thành phần then chốt trong các Trung tâm Giám sát An ninh mạng (SOC). Các công cụ SIEM truyền thống dựa trên luật thường tạo ra nhiều cảnh báo giả. 
 
-Dự án này cung cấp một **Pipeline Phân tích Hành vi Liên kết Đa nguồn Nhật ký** sử dụng Học máy không giám sát. Hệ thống tổng hợp dữ liệu hành vi người dùng từ **4 nguồn nhật ký doanh nghiệp**, xây dựng hồ sơ hành vi hợp nhất 8 chiều, sau đó áp dụng mô hình **Isolation Forest** để gắn thẻ các người dùng có hành vi bất thường. Kết quả phân tích được hiển thị trên **Web Dashboard tương tác** với biểu đồ real-time.
-
----
-
-## ✨ Các tính năng nổi bật
-
-- **Web Dashboard tương tác (Real-time)**: Biểu đồ Plotly.js tương tác (hover, zoom, pan) thay thế hình ảnh tĩnh PNG. Auto-refresh mỗi 30 giây.
-- **4 biểu đồ phân tích trực quan**:
-  - **PCA Scatter Plot**: Biểu đồ phân cụm 2D hiển thị toàn bộ người dùng, phân biệt bình thường vs bất thường.
-  - **Radar Chart**: So sánh profile hành vi Top-5 người dùng nguy cơ cao nhất so với trung bình tổ chức.
-  - **Bar Chart**: Xếp hạng điểm bất thường (Anomaly Score) của các ứng viên đe dọa.
-  - **Heatmap**: Ma trận tương quan Pearson giữa 8 đặc trưng hành vi.
-- **Bảng xếp hạng Insider Threats**: Bảng chi tiết với tô màu mức độ nguy hiểm.
-- **Thiết kế OOP hoàn chỉnh**: Lớp `UEBAPipeline` dễ mở rộng và bảo trì.
-- **Kỹ nghệ đặc trưng tự động**: Trích xuất tự động các đặc trưng hành vi, tìm kiếm động cột thời gian.
-- **Xử lý linh hoạt (Resilience & Fallback)**: Tự động xử lý khi thiếu tệp nhật ký đầu vào.
-- **Hỗ trợ 2 chế độ chạy**: CLI (`python src/ueba_pipeline.py`) và Web Dashboard (`python src/web_app.py`).
+Dự án này cung cấp một **Pipeline Phân tích Hành vi Liên kết Đa nguồn Nhật ký** sử dụng Học máy không giám sát. Phiên bản mới nhất nâng cấp hệ thống từ xử lý Batch (tĩnh) sang kiến trúc **2 Giai đoạn (Offline Profiling & Online Detection)** — thiết kế chuẩn mực của các hệ thống SIEM doanh nghiệp lớn, giúp xử lý khối lượng log khổng lồ mà không gây nghẽn CPU/RAM.
 
 ---
 
-## 🏗️ Kiến trúc Hệ thống
+## ✨ Các tính năng nổi bật mới nhất
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    UEBA Multi-Log Pipeline                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
-│   │ logon.csv│  │device.csv│  │ email.csv│  │ file.csv │      │
-│   └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │
-│        │              │              │              │            │
-│        ▼              ▼              ▼              ▼            │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │  GIAI ĐOẠN 1: Kỹ nghệ đặc trưng (Feature Engineering)│      │
-│   │  • Hành vi đăng nhập   • Hành vi sử dụng USB         │      │
-│   │  • Hành vi gửi email   • Hành vi truy cập tệp        │      │
-│   └──────────────────────┬───────────────────────────────┘      │
-│                          │                                      │
-│                          ▼                                      │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │  GIAI ĐOẠN 2: Liên kết đa nguồn (Outer Join)         │      │
-│   │  Hợp nhất hồ sơ người dùng 8 đặc trưng               │      │
-│   └──────────────────────┬───────────────────────────────┘      │
-│                          │                                      │
-│                          ▼                                      │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │  GIAI ĐOẠN 3: Phát hiện bất thường (Isolation Forest) │      │
-│   │  MinMaxScaler → IsolationForest (contamination=5%)    │      │
-│   └──────────────────────┬───────────────────────────────┘      │
-│                          │                                      │
-│                          ▼                                      │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │  GIAI ĐOẠN 4: Giảm chiều & Trực quan hóa (PCA)       │      │
-│   │  8D → 2D để hiển thị trên Web Dashboard               │      │
-│   └──────────────────────┬───────────────────────────────┘      │
-│                          │                                      │
-│                          ▼                                      │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │  Flask Web Server + Plotly.js Dashboard               │      │
-│   │  📍 PCA Scatter   🕸️ Radar Chart                      │      │
-│   │  📊 Bar Chart     🔥 Heatmap     🚨 Threats Table    │      │
-│   └──────────────────────────────────────────────────────┘      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+- **Kiến trúc 2 Giai đoạn chuẩn Enterprise**: 
+  - **Offline Profiling**: Định kỳ học hỏi "thói quen" bình thường từ dữ liệu lịch sử lớn và lưu **Profile Baseline** xuống Database.
+  - **Online Detection**: Chạy nền (daemon) 24/7, tiêu tốn cực ít RAM, giám sát dòng log mới và đối chiếu ngay lập tức với Baseline.
+- **Real-time SOC Dashboard**: Cảnh báo (Alerts) được đẩy về trình duyệt ngay lập tức (độ trễ mili-giây) thông qua **WebSockets (Flask-SocketIO)** mà không cần tải lại trang.
+- **Log Simulator đi kèm**: Tích hợp sẵn bộ giả lập sinh log hệ thống liên tục và tự động tiêm (inject) các hành vi tấn công (ví dụ: đăng nhập nhiều nửa đêm, tải file nhạy cảm) để dễ dàng demo hệ thống cảnh báo.
+- **Khả năng giải thích (Explainability)**: Khi có cảnh báo, hệ thống chỉ rõ đặc trưng nào (ví dụ: số email ngoài, tải file zip) đang lệch chuẩn bao nhiêu Sigma (σ) so với bình thường.
+
+---
+
+## 🏗️ Kiến trúc Hệ thống 2 Giai đoạn
+
+Vì việc chạy mô hình Học máy phức tạp trực tiếp trên từng dòng log thô của 1000+ máy trạm theo thời gian thực là bất khả thi về mặt tài nguyên, dự án chia làm hai luồng riêng biệt:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  GIAI ĐOẠN 1: OFFLINE PROFILING (Định kỳ ban đêm)          │
+│                                                             │
+│  Log lịch sử (CSV) → src/offline_profiler.py → Train ML    │
+│    → Export model (joblib) + Lưu Profile Baseline vào SQLite│
+└─────────────────────────────────────────────────────────────┘
+                           ↓ Baseline DB (baseline.db)
+┌─────────────────────────────────────────────────────────────┐
+│  GIAI ĐOẠN 2: ONLINE DETECTION (Chạy liên tục 24/7)        │
+│                                                             │
+│  Log mới đổ về → src/online_detector.py → Sliding Window   │
+│    → Feature Vector → So sánh nhanh vs Baseline            │
+│    → Deviation Score > threshold → Cảnh báo nguy hiểm      │
+│    → WebSocket → Cập nhật lên Dashboard SOC                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 8 Đặc trưng hành vi được trích xuất
+### 8 Đặc trưng hành vi được trích xuất (Feature Engineering)
 
 | # | Đặc trưng | Mô tả |
 |---|---|---|
@@ -101,106 +72,88 @@ Dự án này cung cấp một **Pipeline Phân tích Hành vi Liên kết Đa n
 
 ## 📂 Cấu trúc dự án
 
-```
+```text
 ueba-insider-threat/
-├── data/                        # Dữ liệu nhật ký (CSV)
-│   ├── logon.csv                #   Nhật ký đăng nhập/đăng xuất
-│   ├── device.csv               #   Nhật ký thiết bị USB
-│   ├── email.csv                #   Nhật ký email
-│   └── file.csv                 #   Nhật ký truy cập tệp
+├── data/
+│   ├── baseline.db              # [MỚI] SQLite DB lưu Profile Baseline
+│   ├── alerts.db                # [MỚI] SQLite DB lưu lịch sử cảnh báo
+│   ├── live_logs/system.log     # [MỚI] File log thời gian thực
+│   └── logon.csv, device.csv... # Log tĩnh lịch sử cho Profiling
+├── models/                      # [MỚI] Nơi lưu mô hình (.joblib)
 ├── src/
-│   ├── ueba_pipeline.py         # Pipeline ML chính (class UEBAPipeline)
-│   ├── web_app.py               # Flask web server phục vụ Dashboard
-│   ├── templates/
-│   │   └── index.html           # Giao diện Dashboard (Plotly.js)
-│   └── static/
-│       └── style.css            # CSS Dark Mode theme
-├── requirements.txt             # Thư viện Python yêu cầu
-└── README.md                    # Hướng dẫn sử dụng
+│   ├── offline_profiler.py      # [MỚI] Script chạy Giai đoạn 1 (Offline)
+│   ├── online_detector.py       # [MỚI] Engine giám sát Giai đoạn 2 (Online)
+│   ├── log_simulator.py         # [MỚI] Giả lập sinh log hệ thống để demo
+│   ├── ueba_pipeline.py         # Core Pipeline ML (Gom cụm & Isolation Forest)
+│   ├── web_app.py               # Flask Web Server (REST + WebSocket)
+│   ├── templates/index.html     # Giao diện SOC Dashboard
+│   └── static/style.css         # CSS Dark Mode
+└── requirements.txt
 ```
 
 ---
 
-## 🚀 Hướng dẫn cài đặt & Sử dụng
+## 🚀 Hướng dẫn Cài đặt & Chạy Thực tế
 
 ### 1. Chuẩn bị môi trường
 ```bash
-# Clone dự án
 git clone https://github.com/your-username/ueba-insider-threat.git
 cd ueba-insider-threat
-
-# Tạo môi trường ảo
 python -m venv .venv
 
-# Kích hoạt môi trường ảo
-# Windows:
+# Kích hoạt môi trường (Windows)
 .venv\Scripts\activate
-# Linux/macOS:
-source .venv/bin/activate
 
 # Cài đặt thư viện
 pip install -r requirements.txt
 ```
 
-### 2. Chuẩn bị dữ liệu
-Đặt các tệp CSV vào thư mục `data/`. Hệ thống tối ưu nhất với **CERT Insider Threat Dataset**.
+### 2. Bước 1: Tạo Baseline Profile (Offline Profiling)
+Phải chạy bước này để hệ thống "học" thói quen bình thường của user từ file CSV cũ:
+```bash
+python src/offline_profiler.py
+```
+*Lưu ý: Mô hình sẽ được xuất ra `models/` và hồ sơ lưu vào `data/baseline.db`.*
 
-### 3. Chạy Web Dashboard (Khuyến nghị)
+### 3. Bước 2: Khởi động Web Dashboard & Online Detector
 ```bash
 python src/web_app.py
 ```
-Truy cập **http://127.0.0.1:5000** trên trình duyệt để xem Dashboard tương tác.
+Hệ thống sẽ chạy tại địa chỉ **http://127.0.0.1:5000**.
+Truy cập trình duyệt, bạn sẽ thấy 2 Tab: **Lịch sử (Batch)** và **Real-time SOC Monitor**. Engine `OnlineDetector` sẽ tự động chạy ngầm bên trong Flask.
 
-### 4. Chạy CLI (Chế độ dòng lệnh truyền thống)
+### 4. Bước 3: Kích hoạt Sinh log giả lập (Simulator)
+Mở một Terminal khác, chạy Script giả lập để liên tục đẩy dòng log mới vào hệ thống:
 ```bash
-python src/ueba_pipeline.py
+python src/log_simulator.py
 ```
-Kết quả hiển thị trên console + xuất file `ueba_pca_result.png`.
+Lúc này, quay lại trình duyệt ở tab **Real-time SOC Monitor**, bạn sẽ thấy các tín hiệu cảnh báo nhảy tự động trên màn hình mà không cần f5 tải trang.
 
 ---
 
 ## 📊 Hướng dẫn đọc Dashboard
 
-### Thẻ thống kê (Summary Cards)
-- **Tổng người dùng**: Số lượng người dùng được hệ thống phân tích.
-- **Người dùng bất thường**: Số lượng người bị Isolation Forest gắn cờ cảnh báo.
-- **Tỷ lệ bất thường**: Tỷ lệ phần trăm người dùng bất thường trên tổng số.
+### Tab 1: Phân tích Lịch sử (Batch)
+- Hiển thị lại toàn bộ dữ liệu lịch sử dưới dạng Biểu đồ tương tác Plotly.js.
+- **PCA Scatter Plot**: Phân cụm 2 chiều, điểm đỏ là các User bất thường.
+- **Radar Chart**: So sánh chi tiết đa chiều thói quen của Top-5 nghi phạm so với mức trung bình.
+- **Heatmap**: Tương quan giữa các hành vi (Ví dụ: Hay cắm USB ngoài giờ có đi liền với gửi email ra ngoài?).
 
-### Biểu đồ PCA Scatter
-- **Điểm xanh lá** 🟢: Người dùng bình thường.
-- **Điểm đỏ hình thoi** 🔴: Người dùng bất thường, có nhãn User ID kèm theo.
-- Hover vào mỗi điểm để xem chi tiết toàn bộ đặc trưng hành vi.
-
-### Radar Chart
-- So sánh profile hành vi của Top-5 người dùng nguy cơ nhất (đường màu) với đường trung bình tổ chức (đường xanh nét đứt).
-- Các trục thể hiện tỷ lệ % so với giá trị cao nhất trong toàn bộ dữ liệu.
-
-### Bar Chart
-- Hiển thị điểm Anomaly Score. **Điểm càng âm = Người dùng càng bất thường**.
-- Màu đỏ: nguy hiểm cao (< -0.3), cam: trung bình (< -0.15), vàng: thấp hơn.
-
-### Heatmap
-- Hiển thị mức tương quan (Pearson) giữa các đặc trưng. Giá trị gần 1 (đỏ) = tương quan dương mạnh.
-
-### Bảng Insider Threats
-- Xếp hạng chi tiết toàn bộ người dùng bị gắn cờ với đầy đủ số liệu hành vi.
-- Giá trị tô đỏ/vàng khi vượt ngưỡng so với toàn bộ người dùng.
+### Tab 2: Real-time SOC Monitor (Giám sát Thời gian thực)
+- **Live Alert Feed**: Luồng cảnh báo trực tiếp qua WebSocket. Bất cứ khi nào hệ thống phát hiện hành vi lệch chuẩn, một dòng cảnh báo sẽ nhảy lên đầu bảng.
+- **Chi tiết sai lệch (Deviation)**: Phân tích tại sao ML ra quyết định cảnh báo (Ví dụ: `total_emails: 80 (Mean: 20, Dev: 4.5σ)` - gửi nhiều gấp 4.5 lần độ lệch chuẩn).
 
 ---
 
-## 🔬 Chi tiết kỹ thuật
+## 🔬 Tùy biến cho Môi trường Doanh nghiệp Thật
 
-| Mô-đun | Lựa chọn | Lý do |
-|---|---|---|
-| **Mô hình ML** | Isolation Forest | Phát hiện bất thường không giám sát, hiệu quả cao trên dữ liệu nhiều chiều |
-| **Chuẩn hóa** | MinMaxScaler [0,1] | Đảm bảo các đặc trưng có khoảng giá trị khác nhau được so sánh công bằng |
-| **Giảm chiều** | PCA (2 Components) | Chiếu 8 chiều xuống 2 chiều để trực quan hóa trên biểu đồ phân tán |
-| **Liên kết bảng** | Outer Join | Không bỏ sót người dùng chỉ xuất hiện ở 1 nguồn nhật ký |
-| **Web Server** | Flask | Lightweight, tích hợp dễ dàng với Python ML pipeline |
-| **Biểu đồ** | Plotly.js | Tương tác (hover, zoom, pan), hỗ trợ real-time update |
+Hệ thống được thiết kế mở để dễ dàng nâng cấp khi đưa vào Production:
+1. **Thay thế SQLite bằng Redis**: Trong `online_detector.py`, hàm `update_state` hiện đang lưu State vào Memory của Python/SQLite. Để Scale nhiều node, hãy thay bằng Redis Hash.
+2. **Nguồn Log Ingestion**: Đổi `log_simulator.py` thành công cụ cấu hình Logstash/Fluentd, đẩy trực tiếp từ Kafka hoặc đọc Syslog.
+3. **Training Định kỳ**: Đặt cronjob gọi `python src/offline_profiler.py` chạy lúc 2h sáng mỗi Chủ Nhật.
 
 ---
 
 ## 📝 Giấy phép
 
-Dự án được cấp phép theo **Giấy phép MIT**. Xem [LICENSE](LICENSE) để biết chi tiết.
+Dự án được cấp phép theo **Giấy phép MIT**. Phục vụ mục đích nghiên cứu SOC, SIEM và bảo mật dữ liệu doanh nghiệp.
