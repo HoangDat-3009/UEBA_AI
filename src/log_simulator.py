@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | [SIMULATOR] %(mess
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _live_logs_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "live_logs"))
 _log_file = os.path.join(_live_logs_dir, "system.log")
-_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data"))
+_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
 
 users = [f"USER_{i:03d}" for i in range(1, 21)]
 

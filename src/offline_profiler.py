@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data"))
+_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
 _models_dir = os.path.normpath(os.path.join(_script_dir, "..", "models"))
 _baseline_db_path = os.path.join(_data_dir, "baseline.db")
 _alerts_db_path = os.path.join(_data_dir, "alerts.db")

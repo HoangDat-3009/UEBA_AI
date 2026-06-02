@@ -349,6 +349,107 @@ class UEBAPipeline:
         logger.info("File features computed  |  %d unique users", len(result))
         return result
 
+    def process_http(self) -> pd.DataFrame:
+        """Ingest ``http.csv`` and compute per-user web browsing features."""
+        filepath = os.path.join(self.data_dir, "http.csv")
+        try:
+            df = pd.read_csv(filepath)
+            logger.info("Loaded http.csv  |  %d records", len(df))
+        except FileNotFoundError:
+            logger.warning("http.csv not found — skipping HTTP features.")
+            return pd.DataFrame(columns=["user", "total_http_requests", "off_hour_http"])
+
+        df.columns = df.columns.str.strip().str.lower()
+
+        date_col = None
+        for candidate in ("date", "datetime", "timestamp", "time"):
+            if candidate in df.columns:
+                date_col = candidate
+                break
+
+        if date_col is not None:
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df["hour"] = df[date_col].dt.hour
+        else:
+            logger.warning("No datetime column found in http.csv.")
+            df["hour"] = np.nan
+
+        total_http = df.groupby("user").size().reset_index(name="total_http_requests")
+
+        off_mask = (df["hour"] < 7) | (df["hour"] > 18)
+        off_hour_http = (
+            df[off_mask]
+            .groupby("user")
+            .size()
+            .reset_index(name="off_hour_http")
+        )
+
+        result = total_http.merge(off_hour_http, on="user", how="left").fillna(0)
+        result["off_hour_http"] = result["off_hour_http"].astype(int)
+
+        logger.info("HTTP features computed  |  %d unique users", len(result))
+        return result
+
+    # -----------------------------------------------------------------------
+
+    def process_psychometric(self) -> pd.DataFrame:
+        """Ingest ``psychometric.csv`` and extract personality scores."""
+        filepath = os.path.join(self.data_dir, "psychometric.csv")
+        try:
+            df = pd.read_csv(filepath)
+            logger.info("Loaded psychometric.csv  |  %d records", len(df))
+        except FileNotFoundError:
+            logger.warning("psychometric.csv not found — skipping psychometric features.")
+            return pd.DataFrame(columns=["user", "o_score", "c_score", "e_score", "a_score", "n_score"])
+        
+        df.columns = df.columns.str.strip().str.lower()
+        if "user_id" in df.columns:
+            df = df.rename(columns={"user_id": "user"})
+        
+        cols_to_keep = ["user"]
+        for trait in ["o", "c", "e", "a", "n"]:
+            if trait in df.columns:
+                df = df.rename(columns={trait: f"{trait}_score"})
+                cols_to_keep.append(f"{trait}_score")
+        
+        result = df[cols_to_keep].copy()
+        result = result.groupby("user").mean().reset_index()
+        logger.info("Psychometric features computed  |  %d unique users", len(result))
+        return result
+
+    # -----------------------------------------------------------------------
+
+    def process_ldap(self) -> pd.DataFrame:
+        """Ingest LDAP csv files and track role changes over time."""
+        import glob
+        ldap_dir = os.path.join(self.data_dir, "LDAP")
+        csv_files = glob.glob(os.path.join(ldap_dir, "*.csv"))
+        if not csv_files:
+            logger.warning("No LDAP csv files found — skipping LDAP features.")
+            return pd.DataFrame(columns=["user", "role_changes"])
+
+        all_ldap = []
+        for file in csv_files:
+            try:
+                df = pd.read_csv(file)
+                df.columns = df.columns.str.strip().str.lower()
+                if "user_id" in df.columns and "role" in df.columns:
+                    df = df.rename(columns={"user_id": "user"})
+                    df["month"] = os.path.basename(file).replace(".csv", "")
+                    all_ldap.append(df[["user", "role", "month"]])
+            except Exception as e:
+                logger.error(f"Error reading {file}: {e}")
+
+        if not all_ldap:
+            return pd.DataFrame(columns=["user", "role_changes"])
+
+        combined = pd.concat(all_ldap)
+        role_changes = combined.groupby('user')['role'].nunique().reset_index(name='role_changes')
+        role_changes["role_changes"] = (role_changes["role_changes"] - 1).clip(lower=0)
+
+        logger.info("LDAP features computed  |  %d unique users", len(role_changes))
+        return role_changes
+
     # -----------------------------------------------------------------------
     # Core pipeline stages
     # -----------------------------------------------------------------------
@@ -373,10 +474,13 @@ class UEBAPipeline:
         df_device = self.process_device()
         df_email = self.process_email()
         df_file = self.process_file()
+        df_http = self.process_http()
+        df_psy = self.process_psychometric()
+        df_ldap = self.process_ldap()
 
         # Sequential outer joins
         master = df_logon
-        for right_df in [df_device, df_email, df_file]:
+        for right_df in [df_device, df_email, df_file, df_http, df_psy, df_ldap]:
             if right_df.empty:
                 continue
             master = master.merge(right_df, on="user", how="outer")
@@ -724,7 +828,7 @@ if __name__ == "__main__":
     # Resolve data_dir relative to this script's location so it works
     # regardless of the caller's working directory.
     _script_dir = os.path.dirname(os.path.abspath(__file__))
-    _data_dir = os.path.join(_script_dir, "..", "data")
+    _data_dir = os.path.join(_script_dir, "..", "data", "r4.2")
     _data_dir = os.path.normpath(_data_dir)
 
     pipeline = UEBAPipeline(data_dir=_data_dir, contamination=0.05)

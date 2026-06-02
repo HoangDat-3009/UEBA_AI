@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | [MERGE] %(message)
 logger = logging.getLogger(__name__)
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data"))
+_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
 _live_logs_dir = os.path.join(_data_dir, "live_logs")
 _log_file = os.path.join(_live_logs_dir, "system.log")
 

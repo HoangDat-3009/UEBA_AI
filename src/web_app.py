@@ -37,7 +37,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 logger = logging.getLogger(__name__)
 
-_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data"))
+_data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
 _alerts_db_path = os.path.join(_data_dir, "alerts.db")
 _pipeline = UEBAPipeline(data_dir=_data_dir, contamination=0.05)
 
