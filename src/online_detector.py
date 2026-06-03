@@ -18,7 +18,7 @@ _log_file = os.path.join(_live_logs_dir, "system.log")
 _baseline_db_path = os.path.join(_data_dir, "baseline.db")
 _alerts_db_path = os.path.join(_data_dir, "alerts.db")
 
-feature_names = [
+live_feature_names = [
     "total_logins", "off_hour_logins", "total_usb_connects", "off_hour_usb",
     "total_emails", "external_emails", "total_file_access", "exe_zip_downloads"
 ]
@@ -33,6 +33,10 @@ class OnlineDetector:
         self.baselines = {}
         self.global_baselines = {}
         self.last_alert_time = {}
+        
+        # Dynamic feature list determined from database
+        self.feature_names = []
+        self.live_feature_names = live_feature_names
         
         self.load_models()
         self.load_baselines()
@@ -55,6 +59,19 @@ class OnlineDetector:
             for row in c.fetchall():
                 self.global_baselines[row[0]] = {"mean": row[1], "std": max(row[2], 1.0)}
                 
+            # Build the dynamic feature list matching the scaler training order
+            all_possible_features = [
+                "total_logins", "off_hour_logins",
+                "total_usb_connects", "off_hour_usb",
+                "total_emails", "external_emails",
+                "total_file_access", "exe_zip_downloads",
+                "total_http_requests", "off_hour_http",
+                "o_score", "c_score", "e_score", "a_score", "n_score",
+                "role_changes"
+            ]
+            self.feature_names = [f for f in all_possible_features if f in self.global_baselines]
+            logger.info(f"Dynamic feature order determined: {self.feature_names}")
+            
             # Load per-user
             c.execute('SELECT user_id, feature_name, mean, std FROM baselines')
             for row in c.fetchall():
@@ -63,10 +80,11 @@ class OnlineDetector:
                     self.baselines[uid] = {}
                 self.baselines[uid][fname] = {"mean": mean, "std": std}
                 
-                # Initialize user_states with mean so they start normal
+                # Initialize user_states with mean so they start normal (only for live features)
                 if uid not in self.user_states:
-                    self.user_states[uid] = {f: 0 for f in feature_names}
-                self.user_states[uid][fname] = mean
+                    self.user_states[uid] = {f: 0 for f in self.live_feature_names}
+                if fname in self.live_feature_names:
+                    self.user_states[uid][fname] = mean
 
             conn.close()
             logger.info(f"Loaded baselines for {len(self.baselines)} users.")
@@ -78,9 +96,9 @@ class OnlineDetector:
         if not user: return None
         
         if user not in self.user_states:
-            self.user_states[user] = {f: 0 for f in feature_names}
+            self.user_states[user] = {f: 0 for f in self.live_feature_names}
             # Fill with global means if new user
-            for f in feature_names:
+            for f in self.live_feature_names:
                 if f in self.global_baselines:
                     self.user_states[user][f] = self.global_baselines[f]["mean"]
 
@@ -112,7 +130,16 @@ class OnlineDetector:
             return
 
         state = self.user_states[user]
-        vector = [state[f] for f in feature_names]
+        # Construct feature vector combining live states and static baselines
+        vector = []
+        for f in self.feature_names:
+            if f in self.live_feature_names:
+                vector.append(state.get(f, 0))
+            else:
+                base = self.baselines.get(user, {}).get(f)
+                if not base:
+                    base = self.global_baselines.get(f, {"mean": 0})
+                vector.append(base["mean"])
         
         try:
             v_scaled = self.scaler.transform([vector])
@@ -127,8 +154,8 @@ class OnlineDetector:
 
         # Method 2: Baseline deviation check (>1.0σ on at least 2 features)
         deviation_count = 0
-        for i, fname in enumerate(feature_names):
-            val = vector[i]
+        for fname in self.live_feature_names:
+            val = state.get(fname, 0)
             base = self.baselines.get(user, {}).get(fname)
             if not base:
                 base = self.global_baselines.get(fname, {"mean": 0, "std": 1})
@@ -157,7 +184,9 @@ class OnlineDetector:
         
         # Calculate deviations for explainability
         deviations = {}
-        for i, fname in enumerate(feature_names):
+        for i, fname in enumerate(self.feature_names):
+            if fname not in self.live_feature_names:
+                continue
             val = vector[i]
             base = self.baselines.get(user, {}).get(fname)
             if not base:

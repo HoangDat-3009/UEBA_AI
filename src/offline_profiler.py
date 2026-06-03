@@ -58,6 +58,8 @@ def init_dbs():
             key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP
         )
     ''')
+    c.execute('DELETE FROM baselines')
+    c.execute('DELETE FROM global_baselines')
     conn.commit()
     conn.close()
 
@@ -142,7 +144,8 @@ def run_offline_profiling():
             g_std = c.fetchone()[0]
             
             # std shouldn't be 0. Avoid division by zero later.
-            std_val = max(g_std, 1.0)
+            # Use a fraction of global std to represent individual user variance
+            std_val = max(g_std * 0.05, 1.0)
 
             c.execute('''
                 INSERT OR REPLACE INTO baselines (user_id, feature_name, mean, std, min_val, max_val, p95, computed_at)

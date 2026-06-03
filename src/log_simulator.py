@@ -9,11 +9,26 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | [SIMULATOR] %(message)s")
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-_live_logs_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "live_logs"))
-_log_file = os.path.join(_live_logs_dir, "system.log")
 _data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
+_live_logs_dir = os.path.join(_data_dir, "live_logs")
+_log_file = os.path.join(_live_logs_dir, "system.log")
 
-users = [f"USER_{i:03d}" for i in range(1, 21)]
+# Load 20 real users from baseline database if available, fallback to USER_xxx
+users = []
+try:
+    import sqlite3
+    _baseline_db_path = os.path.join(_data_dir, "baseline.db")
+    if os.path.exists(_baseline_db_path):
+        conn = sqlite3.connect(_baseline_db_path)
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT user_id FROM baselines LIMIT 20")
+        users = [row[0] for row in c.fetchall()]
+        conn.close()
+except Exception as e:
+    logging.error(f"Failed to load real users from baseline.db: {e}")
+
+if not users:
+    users = [f"USER_{i:03d}" for i in range(1, 21)]
 
 def ensure_dir():
     os.makedirs(_live_logs_dir, exist_ok=True)
@@ -46,7 +61,7 @@ def generate_anomaly(user):
     now = datetime.now()
     events = []
     # Spike in file downloads (exe/zip) + external emails + off-hour (simulate 3 AM)
-    for _ in range(random.randint(30, 50)):
+    for _ in range(random.randint(60, 100)):
         events.append({
             "timestamp": now.isoformat(),
             "user": user,
@@ -54,7 +69,7 @@ def generate_anomaly(user):
             "hour": 3,
             "filename": f"sensitive_data_{random.randint(1,100)}.zip"
         })
-    for _ in range(random.randint(10, 20)):
+    for _ in range(random.randint(30, 50)):
         events.append({
             "timestamp": now.isoformat(),
             "user": user,
