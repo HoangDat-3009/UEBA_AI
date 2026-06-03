@@ -195,7 +195,13 @@ class UEBAPipeline:
     # -----------------------------------------------------------------------
 
     def process_email(self) -> pd.DataFrame:
-        """Ingest ``email.csv`` and compute per-user e-mail behavioural features.
+        """Ingest email CSV (single or split parts) and compute per-user e-mail behavioural features.
+
+        Supports:
+        - Single file: ``email.csv``
+        - Split files: ``email_1.csv``, ``email_2.csv``, ... ``email_N.csv``
+
+        Files are processed in chunks (100k rows) to avoid OOM on large datasets.
 
         Features
         --------
@@ -210,71 +216,108 @@ class UEBAPipeline:
         -------
         pd.DataFrame
         """
-        filepath = os.path.join(self.data_dir, "email.csv")
-        try:
-            df = pd.read_csv(filepath)
-            logger.info("Loaded email.csv  |  %d records", len(df))
-        except FileNotFoundError:
-            logger.warning("email.csv not found — skipping email features.")
+        import glob
+
+        # Discover email files: prefer split parts, fall back to single file
+        split_files = sorted(
+            glob.glob(os.path.join(self.data_dir, "email_*.csv"))
+        )
+        single_file = os.path.join(self.data_dir, "email.csv")
+
+        if split_files:
+            email_files = split_files
+            logger.info("Found %d split email files: %s … %s",
+                        len(email_files),
+                        os.path.basename(email_files[0]),
+                        os.path.basename(email_files[-1]))
+        elif os.path.exists(single_file):
+            email_files = [single_file]
+            logger.info("Found single email.csv")
+        else:
+            logger.warning("No email CSV files found — skipping email features.")
             return pd.DataFrame(columns=["user", "total_emails", "external_emails"])
 
-        df.columns = df.columns.str.strip().str.lower()
+        # Accumulators — aggregate per-user counts across all chunks/files
+        total_emails_acc: dict[str, int] = {}
+        external_emails_acc: dict[str, int] = {}
+        internal_domain: str | None = None  # determined from first chunk
+        email_strategy: str | None = None   # determined from first chunk
 
-        total_emails = df.groupby("user").size().reset_index(name="total_emails")
+        CHUNK_SIZE = 100_000
 
-        # Strategy 1: explicit 'external' boolean / flag column
-        if "external" in df.columns:
-            external = (
-                df[df["external"].astype(str).str.strip().str.lower().isin(
-                    ["1", "true", "yes", "external"]
-                )]
-                .groupby("user")
-                .size()
-                .reset_index(name="external_emails")
-            )
-        # Strategy 2: detect external by inspecting the 'to' field for
-        #             domains that differ from the organisation's domain
-        elif "to" in df.columns:
-            # Heuristic: the most common domain is the internal domain
-            all_domains = (
-                df["to"]
-                .astype(str)
-                .str.extract(r"@([\w.-]+)", expand=False)
-                .dropna()
-            )
-            if not all_domains.empty:
-                internal_domain = all_domains.mode().iloc[0]
-                df["_is_external"] = ~df["to"].astype(str).str.contains(
-                    internal_domain, case=False, na=False
-                )
-            else:
-                df["_is_external"] = False
+        for file_path in email_files:
+            logger.info("Processing %s …", os.path.basename(file_path))
+            try:
+                reader = pd.read_csv(file_path, chunksize=CHUNK_SIZE, low_memory=False)
+            except Exception as exc:
+                logger.error("Cannot read %s: %s", file_path, exc)
+                continue
 
-            external = (
-                df[df["_is_external"]]
-                .groupby("user")
-                .size()
-                .reset_index(name="external_emails")
-            )
-        # Strategy 3: count emails with attachments as a proxy for risk
-        elif "attachments" in df.columns:
-            has_attachment = df["attachments"].astype(str).str.strip() != ""
-            has_attachment &= df["attachments"].astype(str).str.lower() != "nan"
-            has_attachment &= df["attachments"].astype(str) != "0"
-            external = (
-                df[has_attachment]
-                .groupby("user")
-                .size()
-                .reset_index(name="external_emails")
-            )
-        else:
-            logger.warning(
-                "No 'external', 'to', or 'attachments' column in email.csv "
-                "— external_emails set to 0."
-            )
-            external = pd.DataFrame(columns=["user", "external_emails"])
+            for chunk in reader:
+                chunk.columns = chunk.columns.str.strip().str.lower()
 
-        result = total_emails.merge(external, on="user", how="left").fillna(0)
+                # Determine strategy once from the first chunk
+                if email_strategy is None:
+                    if "external" in chunk.columns:
+                        email_strategy = "external_flag"
+                    elif "to" in chunk.columns:
+                        email_strategy = "to_domain"
+                        # Discover internal domain from this first chunk
+                        all_domains = (
+                            chunk["to"]
+                            .astype(str)
+                            .str.extract(r"@([\w.-]+)", expand=False)
+                            .dropna()
+                        )
+                        if not all_domains.empty:
+                            internal_domain = all_domains.mode().iloc[0]
+                    elif "attachments" in chunk.columns:
+                        email_strategy = "attachments"
+                    else:
+                        email_strategy = "none"
+                        logger.warning(
+                            "No 'external', 'to', or 'attachments' column — "
+                            "external_emails will be 0."
+                        )
+
+                # Count total emails per user in this chunk
+                for user, cnt in chunk.groupby("user").size().items():
+                    total_emails_acc[user] = total_emails_acc.get(user, 0) + cnt
+
+                # Count external emails per user in this chunk
+                if email_strategy == "external_flag":
+                    ext_mask = chunk["external"].astype(str).str.strip().str.lower().isin(
+                        ["1", "true", "yes", "external"]
+                    )
+                    for user, cnt in chunk[ext_mask].groupby("user").size().items():
+                        external_emails_acc[user] = external_emails_acc.get(user, 0) + cnt
+
+                elif email_strategy == "to_domain" and internal_domain:
+                    is_external = ~chunk["to"].astype(str).str.contains(
+                        internal_domain, case=False, na=False
+                    )
+                    for user, cnt in chunk[is_external].groupby("user").size().items():
+                        external_emails_acc[user] = external_emails_acc.get(user, 0) + cnt
+
+                elif email_strategy == "attachments":
+                    has_att = chunk["attachments"].astype(str).str.strip() != ""
+                    has_att &= chunk["attachments"].astype(str).str.lower() != "nan"
+                    has_att &= chunk["attachments"].astype(str) != "0"
+                    for user, cnt in chunk[has_att].groupby("user").size().items():
+                        external_emails_acc[user] = external_emails_acc.get(user, 0) + cnt
+
+        if not total_emails_acc:
+            logger.warning("Email files were empty — skipping email features.")
+            return pd.DataFrame(columns=["user", "total_emails", "external_emails"])
+
+        total_df = pd.DataFrame(
+            list(total_emails_acc.items()), columns=["user", "total_emails"]
+        )
+        external_df = pd.DataFrame(
+            list(external_emails_acc.items()), columns=["user", "external_emails"]
+        )
+
+        result = total_df.merge(external_df, on="user", how="left").fillna(0)
         result["external_emails"] = result["external_emails"].astype(int)
 
         logger.info("Email features computed  |  %d unique users", len(result))
@@ -349,6 +392,173 @@ class UEBAPipeline:
         logger.info("File features computed  |  %d unique users", len(result))
         return result
 
+    def process_http(self) -> pd.DataFrame:
+        """Ingest HTTP CSV (single or split parts) and compute per-user web browsing features.
+
+        Supports:
+        - Single file: ``http.csv``
+        - Split files: ``http_1.csv``, ``http_2.csv``, ... ``http_N.csv``
+
+        Files are processed in chunks (100k rows) to avoid OOM on large datasets.
+
+        Features
+        --------
+        total_http_requests : int
+            Total HTTP request events for the user.
+        off_hour_http : int
+            HTTP requests outside normal working hours (before 07:00 or after 18:00).
+
+        Returns
+        -------
+        pd.DataFrame
+        """
+        import glob
+
+        # Discover HTTP files: prefer split parts, fall back to single file
+        split_files = sorted(
+            glob.glob(os.path.join(self.data_dir, "http_*.csv")),
+            key=lambda p: int(
+                os.path.splitext(os.path.basename(p))[0].replace("http_", "")
+            ) if os.path.splitext(os.path.basename(p))[0].replace("http_", "").isdigit() else 0
+        )
+        single_file = os.path.join(self.data_dir, "http.csv")
+
+        if split_files:
+            http_files = split_files
+            logger.info("Found %d split HTTP files: %s … %s",
+                        len(http_files),
+                        os.path.basename(http_files[0]),
+                        os.path.basename(http_files[-1]))
+        elif os.path.exists(single_file):
+            http_files = [single_file]
+            logger.info("Found single http.csv")
+        else:
+            logger.warning("http.csv not found — skipping HTTP features.")
+            return pd.DataFrame(columns=["user", "total_http_requests", "off_hour_http"])
+
+        # Accumulators
+        total_http_acc: dict[str, int] = {}
+        off_hour_acc: dict[str, int] = {}
+        date_col_detected: str | None = None
+        date_col_warned = False
+
+        CHUNK_SIZE = 100_000
+
+        for file_path in http_files:
+            logger.info("Processing %s …", os.path.basename(file_path))
+            try:
+                reader = pd.read_csv(file_path, chunksize=CHUNK_SIZE, low_memory=False)
+            except Exception as exc:
+                logger.error("Cannot read %s: %s", file_path, exc)
+                continue
+
+            for chunk in reader:
+                chunk.columns = chunk.columns.str.strip().str.lower()
+
+                # Detect date column once
+                if date_col_detected is None:
+                    for candidate in ("date", "datetime", "timestamp", "time"):
+                        if candidate in chunk.columns:
+                            date_col_detected = candidate
+                            break
+                    if date_col_detected is None and not date_col_warned:
+                        logger.warning("No datetime column found in HTTP files — "
+                                       "off-hour analysis unavailable.")
+                        date_col_warned = True
+
+                # Parse hour from datetime column
+                if date_col_detected and date_col_detected in chunk.columns:
+                    chunk["_dt"] = pd.to_datetime(chunk[date_col_detected], errors="coerce")
+                    chunk["hour"] = chunk["_dt"].dt.hour
+                else:
+                    chunk["hour"] = np.nan
+
+                # Accumulate total requests
+                for user, cnt in chunk.groupby("user").size().items():
+                    total_http_acc[user] = total_http_acc.get(user, 0) + cnt
+
+                # Accumulate off-hour requests
+                off_mask = (chunk["hour"] < 7) | (chunk["hour"] > 18)
+                for user, cnt in chunk[off_mask].groupby("user").size().items():
+                    off_hour_acc[user] = off_hour_acc.get(user, 0) + cnt
+
+        if not total_http_acc:
+            logger.warning("HTTP files were empty — skipping HTTP features.")
+            return pd.DataFrame(columns=["user", "total_http_requests", "off_hour_http"])
+
+        total_df = pd.DataFrame(
+            list(total_http_acc.items()), columns=["user", "total_http_requests"]
+        )
+        off_hour_df = pd.DataFrame(
+            list(off_hour_acc.items()), columns=["user", "off_hour_http"]
+        )
+
+        result = total_df.merge(off_hour_df, on="user", how="left").fillna(0)
+        result["off_hour_http"] = result["off_hour_http"].astype(int)
+
+        logger.info("HTTP features computed  |  %d unique users", len(result))
+        return result
+
+    # -----------------------------------------------------------------------
+
+    def process_psychometric(self) -> pd.DataFrame:
+        """Ingest ``psychometric.csv`` and extract personality scores."""
+        filepath = os.path.join(self.data_dir, "psychometric.csv")
+        try:
+            df = pd.read_csv(filepath)
+            logger.info("Loaded psychometric.csv  |  %d records", len(df))
+        except FileNotFoundError:
+            logger.warning("psychometric.csv not found — skipping psychometric features.")
+            return pd.DataFrame(columns=["user", "o_score", "c_score", "e_score", "a_score", "n_score"])
+        
+        df.columns = df.columns.str.strip().str.lower()
+        if "user_id" in df.columns:
+            df = df.rename(columns={"user_id": "user"})
+        
+        cols_to_keep = ["user"]
+        for trait in ["o", "c", "e", "a", "n"]:
+            if trait in df.columns:
+                df = df.rename(columns={trait: f"{trait}_score"})
+                cols_to_keep.append(f"{trait}_score")
+        
+        result = df[cols_to_keep].copy()
+        result = result.groupby("user").mean().reset_index()
+        logger.info("Psychometric features computed  |  %d unique users", len(result))
+        return result
+
+    # -----------------------------------------------------------------------
+
+    def process_ldap(self) -> pd.DataFrame:
+        """Ingest LDAP csv files and track role changes over time."""
+        import glob
+        ldap_dir = os.path.join(self.data_dir, "LDAP")
+        csv_files = glob.glob(os.path.join(ldap_dir, "*.csv"))
+        if not csv_files:
+            logger.warning("No LDAP csv files found — skipping LDAP features.")
+            return pd.DataFrame(columns=["user", "role_changes"])
+
+        all_ldap = []
+        for file in csv_files:
+            try:
+                df = pd.read_csv(file)
+                df.columns = df.columns.str.strip().str.lower()
+                if "user_id" in df.columns and "role" in df.columns:
+                    df = df.rename(columns={"user_id": "user"})
+                    df["month"] = os.path.basename(file).replace(".csv", "")
+                    all_ldap.append(df[["user", "role", "month"]])
+            except Exception as e:
+                logger.error(f"Error reading {file}: {e}")
+
+        if not all_ldap:
+            return pd.DataFrame(columns=["user", "role_changes"])
+
+        combined = pd.concat(all_ldap)
+        role_changes = combined.groupby('user')['role'].nunique().reset_index(name='role_changes')
+        role_changes["role_changes"] = (role_changes["role_changes"] - 1).clip(lower=0)
+
+        logger.info("LDAP features computed  |  %d unique users", len(role_changes))
+        return role_changes
+
     # -----------------------------------------------------------------------
     # Core pipeline stages
     # -----------------------------------------------------------------------
@@ -373,10 +583,13 @@ class UEBAPipeline:
         df_device = self.process_device()
         df_email = self.process_email()
         df_file = self.process_file()
+        df_http = self.process_http()
+        df_psy = self.process_psychometric()
+        df_ldap = self.process_ldap()
 
         # Sequential outer joins
         master = df_logon
-        for right_df in [df_device, df_email, df_file]:
+        for right_df in [df_device, df_email, df_file, df_http, df_psy, df_ldap]:
             if right_df.empty:
                 continue
             master = master.merge(right_df, on="user", how="outer")
@@ -697,6 +910,21 @@ class UEBAPipeline:
             "feature_averages": feature_averages,
         }
 
+    # -----------------------------------------------------------------------
+    # Export Models
+    # -----------------------------------------------------------------------
+
+    def export_model(self, model_path: str, scaler_path: str):
+        """Export the trained Isolation Forest and MinMaxScaler to disk."""
+        import joblib
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
+        os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+        joblib.dump(self.model, model_path)
+        joblib.dump(self.scaler, scaler_path)
+        logger.info("Exported model to %s and scaler to %s", model_path, scaler_path)
+
+
 
 # ===========================================================================
 # MAIN EXECUTION
@@ -709,7 +937,7 @@ if __name__ == "__main__":
     # Resolve data_dir relative to this script's location so it works
     # regardless of the caller's working directory.
     _script_dir = os.path.dirname(os.path.abspath(__file__))
-    _data_dir = os.path.join(_script_dir, "..", "data")
+    _data_dir = os.path.join(_script_dir, "..", "data", "r4.2")
     _data_dir = os.path.normpath(_data_dir)
 
     pipeline = UEBAPipeline(data_dir=_data_dir, contamination=0.05)
