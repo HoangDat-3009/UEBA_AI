@@ -57,11 +57,15 @@ def generate_normal_event(user):
         
     return event
 
-def generate_anomaly(user):
+def generate_anomaly(user, critical=False):
     now = datetime.now()
     events = []
+    
+    file_count = random.randint(300, 500) if critical else random.randint(60, 100)
+    email_count = random.randint(150, 300) if critical else random.randint(30, 50)
+    
     # Spike in file downloads (exe/zip) + external emails + off-hour (simulate 3 AM)
-    for _ in range(random.randint(60, 100)):
+    for _ in range(file_count):
         events.append({
             "timestamp": now.isoformat(),
             "user": user,
@@ -69,7 +73,7 @@ def generate_anomaly(user):
             "hour": 3,
             "filename": f"sensitive_data_{random.randint(1,100)}.zip"
         })
-    for _ in range(random.randint(30, 50)):
+    for _ in range(email_count):
         events.append({
             "timestamp": now.isoformat(),
             "user": user,
@@ -94,8 +98,9 @@ def run_simulation(interval=2.0):
             # Randomly inject anomaly (2% chance per tick)
             if random.random() < 0.02:
                 u = random.choice(users)
-                logging.warning(f"Injecting anomaly for {u}")
-                evts = generate_anomaly(u)
+                is_critical = random.random() < 0.3 # 30% of anomalies are critical
+                logging.warning(f"Injecting {'CRITICAL ' if is_critical else ''}anomaly for {u}")
+                evts = generate_anomaly(u, critical=is_critical)
                 for evt in evts:
                     f.write(json.dumps(evt) + "\n")
                     

@@ -79,12 +79,6 @@ class OnlineDetector:
                 if uid not in self.baselines:
                     self.baselines[uid] = {}
                 self.baselines[uid][fname] = {"mean": mean, "std": std}
-                
-                # Initialize user_states with mean so they start normal (only for live features)
-                if uid not in self.user_states:
-                    self.user_states[uid] = {f: 0 for f in self.live_feature_names}
-                if fname in self.live_feature_names:
-                    self.user_states[uid][fname] = mean
 
             conn.close()
             logger.info(f"Loaded baselines for {len(self.baselines)} users.")
@@ -97,9 +91,12 @@ class OnlineDetector:
         
         if user not in self.user_states:
             self.user_states[user] = {f: 0 for f in self.live_feature_names}
-            # Fill with global means if new user
+            # Fill with personal baseline means if known, else global means
             for f in self.live_feature_names:
-                if f in self.global_baselines:
+                base = self.baselines.get(user, {}).get(f)
+                if base:
+                    self.user_states[user][f] = base["mean"]
+                elif f in self.global_baselines:
                     self.user_states[user][f] = self.global_baselines[f]["mean"]
 
         state = self.user_states[user]
@@ -198,7 +195,7 @@ class OnlineDetector:
             if dev > 2.0:  # More than 2 sigma
                 deviations[fname] = {"observed": val, "mean": round(mean, 2), "deviation_sigma": round(dev, 2)}
                 
-        desc = f"Hành vi bất thường phát hiện. Điểm: {score:.4f}"
+        desc = f"Anomalous behavior detected. Score: {score:.4f}"
         
         # Save to DB
         try:
@@ -277,6 +274,7 @@ class OnlineDetector:
                 time.sleep(0.5)
                 continue
 
+            events_processed = False
             for line in new_lines:
                 line = line.strip()
                 if not line:
@@ -286,6 +284,7 @@ class OnlineDetector:
                     user = self.update_state(event)
                     if user:
                         event_count += 1
+                        events_processed = True
                         self.evaluate_user(user)
                         if event_count % 100 == 0:
                             logger.info(f"Processed {event_count} events. Users tracked: {len(self.user_states)}")
@@ -293,6 +292,9 @@ class OnlineDetector:
                     pass
                 except Exception as e:
                     logger.error(f"Error processing line: {e}")
+            
+            if events_processed and self.socketio:
+                self.socketio.emit('data_updated', {'status': 'success'})
 
     def stop(self):
         self.running = False

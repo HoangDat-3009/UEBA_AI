@@ -2,6 +2,12 @@
 # ===========================================================================
 # Flask Web Server for UEBA Dashboard
 # ===========================================================================
+# The web server does NOT load the training dataset (CSV files).
+# It uses:
+#   - Pre-trained model (joblib) from offline profiling
+#   - Baseline statistics (baseline.db)
+#   - Live log data (system.log) for real-time analysis
+# ===========================================================================
 
 import os
 import sys
@@ -15,13 +21,13 @@ from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO
 
 # ---------------------------------------------------------------------------
-# Ensure the src/ directory is on sys.path so we can import the pipeline
+# Ensure the src/ directory is on sys.path so we can import modules
 # ---------------------------------------------------------------------------
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
-from ueba_pipeline import UEBAPipeline
+from live_analyzer import LiveAnalyzer
 from online_detector import OnlineDetector
 from offline_profiler import run_offline_profiling
 
@@ -39,23 +45,14 @@ logger = logging.getLogger(__name__)
 
 _data_dir = os.path.normpath(os.path.join(_script_dir, "..", "data", "r4.2"))
 _alerts_db_path = os.path.join(_data_dir, "alerts.db")
-_pipeline = UEBAPipeline(data_dir=_data_dir, contamination=0.05)
 
-_cached_result: dict | None = None
-_last_updated: str | None = None
+# Live analyzer — uses trained model + live logs (NOT dataset CSVs)
+_analyzer = LiveAnalyzer()
 
+# Online detector for real-time log monitoring
 detector = OnlineDetector(socketio_ext=socketio)
 detector_thread = None
 
-
-def _run_pipeline() -> dict:
-    global _cached_result, _last_updated
-    _cached_result = _pipeline.run_for_web()
-    _last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    _cached_result["last_updated"] = _last_updated
-    return _cached_result
-
-_run_pipeline()
 
 # ---------------------------------------------------------------------------
 # Routes
@@ -65,18 +62,22 @@ _run_pipeline()
 def index():
     return render_template("index.html")
 
-@app.route("/api/data")
-def api_data():
-    if _cached_result is None:
-        _run_pipeline()
-    return jsonify(_cached_result)
 
-@app.route("/api/refresh", methods=["POST"])
-def api_refresh():
-    result = _run_pipeline()
+@app.route("/api/live-analysis")
+def api_live_analysis():
+    """Analyze live log data using the pre-trained model.
+
+    This endpoint parses system.log, aggregates per-user features,
+    and uses the trained Isolation Forest to detect anomalies.
+
+    Query params:
+        refresh: if "true", force re-parse even if log hasn't changed
+    """
+    force = request.args.get("refresh", "").lower() == "true"
+    result = _analyzer.analyze(force=force, current_states=detector.user_states)
+    result["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return jsonify(result)
 
-# --- New Real-time API Routes ---
 
 @app.route("/api/alerts")
 def api_alerts():
@@ -182,6 +183,8 @@ def api_alerts_history():
 def api_offline_run():
     try:
         run_offline_profiling()
+        # Reload live analyzer with new model + baselines
+        _analyzer.reload()
         # Reload detector models
         detector.load_models()
         detector.load_baselines()
@@ -216,6 +219,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("  [UEBA] Web Dashboard (Real-time Enabled)")
     print("  [URL]  http://127.0.0.1:5000")
+    print("  [DATA] Live log analysis (NOT dataset)")
     print("=" * 60 + "\n")
     # Start detector automatically
     detector_thread = threading.Thread(target=detector.run, daemon=True)
