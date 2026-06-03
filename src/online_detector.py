@@ -275,6 +275,7 @@ class OnlineDetector:
                 continue
 
             events_processed = False
+            users_changed = set()
             for line in new_lines:
                 line = line.strip()
                 if not line:
@@ -285,13 +286,16 @@ class OnlineDetector:
                     if user:
                         event_count += 1
                         events_processed = True
-                        self.evaluate_user(user)
+                        users_changed.add(user)
                         if event_count % 100 == 0:
                             logger.info(f"Processed {event_count} events. Users tracked: {len(self.user_states)}")
                 except json.JSONDecodeError:
                     pass
                 except Exception as e:
                     logger.error(f"Error processing line: {e}")
+            
+            for user in users_changed:
+                self.evaluate_user(user)
             
             if events_processed and self.socketio:
                 self.socketio.emit('data_updated', {'status': 'success'})

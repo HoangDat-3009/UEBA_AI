@@ -3,11 +3,42 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="UEBA Dashboard - Hệ thống phát hiện mối đe dọa nội bộ doanh nghiệp bằng AI và Học máy" />
+    <meta name="description" content="UEBA Dashboard — AI-Powered Insider Threat Detection System" />
     <title>🛡️ UEBA Dashboard — Insider Threat Detection</title>
     <link rel="stylesheet" href="/static/style.css" />
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <style>
+        .lang-switch {
+            display: flex;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-sm);
+            padding: 3px;
+            gap: 2px;
+            margin-right: 8px;
+        }
+        .lang-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: var(--radius-xs);
+            transition: var(--transition);
+        }
+        .lang-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .lang-btn.active {
+            background: var(--gradient-accent);
+            color: #fff;
+            box-shadow: var(--shadow-glow-blue);
+        }
+    </style>
 </head>
 <body>
 
@@ -15,7 +46,7 @@
 <div class="loading-overlay" id="loadingOverlay">
     <div class="loading-spinner">
         <div class="spinner-ring"></div>
-        <div class="loading-text">Đang phân tích dữ liệu...</div>
+        <div class="loading-text" data-i18n="loading_text">Analyzing data...</div>
     </div>
 </div>
 
@@ -26,25 +57,29 @@
         <div class="header-left">
             <div class="header-logo">🛡️</div>
             <div>
-                <h1>UEBA Insider Threat Dashboard</h1>
-                <div class="header-subtitle">Multi-Log Correlation &amp; Anomaly Detection — AI-Driven Enterprise Security</div>
+                <h1 data-i18n="header_title">UEBA Insider Threat Dashboard</h1>
+                <div class="header-subtitle" data-i18n="header_subtitle">Multi-Log Correlation &amp; Anomaly Detection — AI-Driven Enterprise Security</div>
             </div>
         </div>
         <div class="header-right">
+            <div class="lang-switch">
+                <button class="lang-btn active" id="lang-en" onclick="changeLanguage('en')">EN</button>
+                <button class="lang-btn" id="lang-vi" onclick="changeLanguage('vi')">VI</button>
+            </div>
             <div class="status-badge">
                 <div class="status-dot"></div>
-                <span>Pipeline Active</span>
+                <span data-i18n="pipeline_active">Pipeline Active</span>
             </div>
             <div class="auto-refresh-toggle">
                 <label class="toggle-switch">
                     <input type="checkbox" id="autoRefreshToggle" checked />
                     <span class="toggle-slider"></span>
                 </label>
-                <span>Auto-refresh (30s)</span>
+                <span data-i18n="auto_refresh">Auto-refresh (30s)</span>
             </div>
             <button class="btn-refresh" id="btnRefresh" onclick="refreshData()">
                 <span class="refresh-icon">🔄</span>
-                <span>Phân tích lại</span>
+                <span data-i18n="btn_refresh">Analyze</span>
             </button>
             <span class="last-updated" id="lastUpdated"></span>
         </div>
@@ -52,9 +87,9 @@
 
     <!-- ==================== TABS ==================== -->
     <div class="tab-menu animate-in delay-1">
-        <button class="tab-btn active" id="btnTabBatch" onclick="switchTab('batch')">📊 Phân tích & Lịch sử</button>
-        <button class="tab-btn" id="btnTabRealtime" onclick="switchTab('realtime')"><span class="live-dot"></span> Live Threat Feed</button>
-        <button class="btn-refresh" style="margin-left:auto; background:var(--gradient-danger);" onclick="runOfflineProfile()">⚙️ Chạy Baseline Profiling</button>
+        <button class="tab-btn active" id="btnTabBatch" onclick="switchTab('batch')" data-i18n="tab_batch">📊 Analysis & History</button>
+        <button class="tab-btn" id="btnTabRealtime" onclick="switchTab('realtime')"><span class="live-dot"></span> <span data-i18n="tab_realtime">Live Threat Feed</span></button>
+        <button class="btn-refresh" style="margin-left:auto; background:var(--gradient-danger);" onclick="runOfflineProfile()" data-i18n="btn_run_profiling">⚙️ Run Baseline Profiling</button>
     </div>
 
     <div id="tabBatch" class="tab-pane active">
@@ -63,20 +98,20 @@
     <div class="filter-bar animate-in delay-2">
         <div class="filter-label">
             <span class="filter-icon">📅</span>
-            Lọc theo ngày
+            <span data-i18n="filter_label">Filter by Date</span>
         </div>
         <input type="date" class="date-input" id="filterDateFrom" />
         <span style="color:var(--text-muted); font-size:12px;">→</span>
         <input type="date" class="date-input" id="filterDateTo" />
         <button class="btn-filter btn-filter-primary" onclick="applyDateFilter()">
-            🔍 Lọc
+            🔍 <span data-i18n="filter_submit">Filter</span>
         </button>
         <button class="btn-filter btn-filter-secondary" onclick="clearDateFilter()">
-            ✕ Xem tất cả
+            ✕ <span data-i18n="filter_clear">View All</span>
         </button>
         <div class="filter-separator"></div>
-        <div class="filter-info" id="filterInfo">
-            Đang xem: <span class="badge" id="filterBadge">Tất cả</span>
+        <div class="filter-info">
+            <span data-i18n="filter_info">Viewing:</span> <span class="badge" id="filterBadge" data-i18n="filter_all">ALL</span>
         </div>
     </div>
 
@@ -85,22 +120,22 @@
         <div class="summary-card card-total animate-in delay-2">
             <div class="card-icon">👥</div>
             <div class="card-value" id="cardTotal">—</div>
-            <div class="card-label">Tổng người dùng phân tích</div>
+            <div class="card-label" data-i18n="card_total_users">Total Analyzed Users</div>
         </div>
         <div class="summary-card card-anomaly animate-in delay-3">
             <div class="card-icon">🚨</div>
             <div class="card-value" id="cardAnomalous">—</div>
-            <div class="card-label">Người dùng bất thường</div>
+            <div class="card-label" data-i18n="card_anomalous_users">Anomalous Users</div>
         </div>
         <div class="summary-card card-normal animate-in delay-4">
             <div class="card-icon">✅</div>
             <div class="card-value" id="cardNormal">—</div>
-            <div class="card-label">Người dùng bình thường</div>
+            <div class="card-label" data-i18n="card_normal_users">Normal Users</div>
         </div>
         <div class="summary-card card-rate animate-in delay-5">
             <div class="card-icon">📊</div>
             <div class="card-value" id="cardRate">—</div>
-            <div class="card-label">Tỷ lệ phát hiện bất thường</div>
+            <div class="card-label" data-i18n="card_anomaly_rate">Anomaly Detection Rate</div>
         </div>
     </div>
 
@@ -112,9 +147,9 @@
                 <div>
                     <div class="chart-title">
                         <span class="chart-title-icon">📍</span>
-                        Biểu đồ phân cụm PCA (Principal Component Analysis)
+                        <span data-i18n="pca_title">PCA Clustering Plot</span>
                     </div>
-                    <div class="chart-subtitle">Chiếu 8 đặc trưng hành vi xuống 2 chiều — Mỗi điểm là 1 người dùng</div>
+                    <div class="chart-subtitle" data-i18n="pca_subtitle">Projecting behavioral features to 2D — Each point is a user</div>
                 </div>
             </div>
             <div class="chart-container" id="pcaChart"></div>
@@ -126,9 +161,9 @@
                 <div>
                     <div class="chart-title">
                         <span class="chart-title-icon">🕸️</span>
-                        Radar — Profile hành vi người dùng nguy cơ cao
+                        <span data-i18n="radar_title">Radar — High-risk User Behavior Profile</span>
                     </div>
-                    <div class="chart-subtitle">So sánh profile Top-5 người dùng bất thường vs. mức trung bình tổ chức</div>
+                    <div class="chart-subtitle" data-i18n="radar_subtitle">Comparing Top-5 anomalous users vs. organizational average</div>
                 </div>
             </div>
             <div class="chart-container" id="radarChart"></div>
@@ -140,9 +175,9 @@
                 <div>
                     <div class="chart-title">
                         <span class="chart-title-icon">📊</span>
-                        Anomaly Score — Xếp hạng mức độ bất thường
+                        <span data-i18n="bar_title">Anomaly Score Ranking</span>
                     </div>
-                    <div class="chart-subtitle">Điểm bất thường (Isolation Forest) — Càng âm = Càng nguy hiểm</div>
+                    <div class="chart-subtitle" data-i18n="bar_subtitle">Anomaly score (Isolation Forest) — More negative = More anomalous</div>
                 </div>
             </div>
             <div class="chart-container" id="barChart"></div>
@@ -154,9 +189,9 @@
                 <div>
                     <div class="chart-title">
                         <span class="chart-title-icon">🔥</span>
-                        Heatmap — Tương quan giữa các đặc trưng hành vi
+                        <span data-i18n="heatmap_title">Heatmap — Behavioral Feature Correlation</span>
                     </div>
-                    <div class="chart-subtitle">Ma trận tương quan Pearson giữa 8 đặc trưng hành vi của toàn bộ người dùng</div>
+                    <div class="chart-subtitle" data-i18n="heatmap_subtitle">Pearson correlation matrix of behavioral features</div>
                 </div>
             </div>
             <div class="chart-container" id="heatmapChart"></div>
@@ -169,9 +204,9 @@
             <div>
                 <div class="chart-title">
                     <span class="chart-title-icon">🚨</span>
-                    Bảng xếp hạng — Insider Threat Candidates
+                    <span data-i18n="table_title">Insider Threat Candidates</span>
                 </div>
-                <div class="chart-subtitle">Danh sách người dùng bị gắn cờ bất thường, sắp xếp theo mức độ nguy hiểm giảm dần</div>
+                <div class="chart-subtitle" data-i18n="table_subtitle">Users flagged as anomalous, sorted by descending severity</div>
             </div>
         </div>
         <div class="table-wrapper">
@@ -192,21 +227,21 @@
                 <div class="stats-mini-icon icon-total">📋</div>
                 <div class="stats-mini-info">
                     <div class="stats-mini-value val-blue" id="histTotalAlerts">0</div>
-                    <div class="stats-mini-label">Tổng cảnh báo</div>
+                    <div class="stats-mini-label" data-i18n="hist_total_alerts">Total Alerts</div>
                 </div>
             </div>
             <div class="stats-mini-card">
                 <div class="stats-mini-icon icon-critical">🔴</div>
                 <div class="stats-mini-info">
                     <div class="stats-mini-value val-red" id="histCriticalCount">0</div>
-                    <div class="stats-mini-label">Nghiêm trọng (Critical)</div>
+                    <div class="stats-mini-label" data-i18n="hist_critical_count">Critical Alerts</div>
                 </div>
             </div>
             <div class="stats-mini-card">
                 <div class="stats-mini-icon icon-users">👤</div>
                 <div class="stats-mini-info">
                     <div class="stats-mini-value val-amber" id="histUniqueUsers">0</div>
-                    <div class="stats-mini-label">Người dùng bị cảnh báo</div>
+                    <div class="stats-mini-label" data-i18n="hist_unique_users">Flagged Users</div>
                 </div>
             </div>
         </div>
@@ -218,9 +253,9 @@
                     <div>
                         <div class="chart-title">
                             <span class="chart-title-icon">📈</span>
-                            Timeline cảnh báo
+                            <span data-i18n="hist_timeline_title">Alert Timeline</span>
                         </div>
-                        <div class="chart-subtitle">Số lượng cảnh báo theo thời gian — cập nhật real-time</div>
+                        <div class="chart-subtitle" data-i18n="hist_timeline_subtitle">Alert count over time — real-time updates</div>
                     </div>
                 </div>
                 <div class="chart-container" id="histTimelineChart" style="min-height:300px;"></div>
@@ -230,9 +265,9 @@
                     <div>
                         <div class="chart-title">
                             <span class="chart-title-icon">🎯</span>
-                            Phân bố mức độ
+                            <span data-i18n="hist_severity_title">Severity Distribution</span>
                         </div>
-                        <div class="chart-subtitle">Tỷ lệ CRITICAL vs HIGH</div>
+                        <div class="chart-subtitle" data-i18n="hist_severity_subtitle">CRITICAL vs HIGH ratio</div>
                     </div>
                 </div>
                 <div class="chart-container" id="histSeverityChart" style="min-height:300px;"></div>
@@ -245,28 +280,29 @@
                 <div>
                     <div class="chart-title">
                         <span class="chart-title-icon">📜</span>
-                        Lịch sử cảnh báo chi tiết
+                        <span data-i18n="hist_table_title">Detailed Alert History</span>
                     </div>
-                    <div class="chart-subtitle">Toàn bộ cảnh báo đã ghi nhận, cập nhật real-time khi có alert mới</div>
+                    <div class="chart-subtitle" data-i18n="hist_table_subtitle">All recorded alerts, updated real-time</div>
                 </div>
             </div>
+
             <div class="table-wrapper history-alert-table">
                 <table class="threats-table">
                     <thead>
                         <tr>
-                            <th style="width: 15%">Thời gian</th>
-                            <th style="width: 12%">Mức độ</th>
-                            <th style="width: 12%">User ID</th>
-                            <th style="width: 10%">Điểm</th>
-                            <th style="width: 51%">Phân tích nguyên nhân</th>
+                            <th style="width: 15%" data-i18n="hist_col_time">Timestamp</th>
+                            <th style="width: 12%" data-i18n="hist_col_severity">Severity</th>
+                            <th style="width: 12%" data-i18n="hist_col_user">User ID</th>
+                            <th style="width: 10%" data-i18n="hist_col_score">Score</th>
+                            <th style="width: 51%" data-i18n="hist_col_reason">Root Cause Analysis</th>
                         </tr>
                     </thead>
                     <tbody id="histAlertsBody">
                         <tr><td colspan="5">
                             <div class="no-data-placeholder">
                                 <div class="no-data-icon">📭</div>
-                                <div class="no-data-text">Chưa có cảnh báo nào</div>
-                                <div class="no-data-hint">Dữ liệu sẽ tự động cập nhật khi hệ thống phát hiện hành vi bất thường</div>
+                                <div class="no-data-text" data-i18n="empty_title">No alerts recorded</div>
+                                <div class="no-data-hint" data-i18n="empty_hint">Data will automatically update when anomalous behaviors are detected</div>
                             </div>
                         </td></tr>
                     </tbody>
@@ -282,35 +318,35 @@
             <div class="summary-card card-anomaly">
                 <div class="card-icon">🔴</div>
                 <div class="card-value" id="rtAlertCount">0</div>
-                <div class="card-label">Cảnh báo Live mới</div>
+                <div class="card-label" data-i18n="rt_new_alerts">New Live Alerts</div>
             </div>
             <div class="summary-card card-total">
                 <div class="card-icon">⚡</div>
-                <div class="card-value" id="rtDetectorStatus">Đang chạy</div>
-                <div class="card-label">Trạng thái Online Detector</div>
+                <div class="card-value" id="rtDetectorStatus">—</div>
+                <div class="card-label" data-i18n="rt_status">Online Detector Status</div>
             </div>
         </div>
         
         <div class="threats-section">
             <div class="chart-header">
                 <div>
-                    <div class="chart-title"><span class="chart-title-icon">🚨</span> Live Alert Feed</div>
-                    <div class="chart-subtitle">Cảnh báo tự động đẩy về từ hệ thống Online Detection</div>
+                    <div class="chart-title"><span class="chart-title-icon">🚨</span> <span data-i18n="rt_title">Live Alert Feed</span></div>
+                    <div class="chart-subtitle" data-i18n="rt_subtitle">Auto-pushed alerts from the Online Detection system</div>
                 </div>
             </div>
             <div class="table-wrapper">
                 <table class="threats-table">
                     <thead>
                         <tr>
-                            <th style="width: 15%">Thời gian</th>
-                            <th style="width: 15%">Mức độ</th>
-                            <th style="width: 15%">User ID</th>
-                            <th style="width: 10%">Điểm</th>
-                            <th style="width: 45%">Phân tích nguyên nhân (Chi tiết sai lệch)</th>
+                            <th style="width: 15%" data-i18n="rt_col_time">Timestamp</th>
+                            <th style="width: 15%" data-i18n="rt_col_severity">Severity</th>
+                            <th style="width: 15%" data-i18n="rt_col_user">User ID</th>
+                            <th style="width: 10%" data-i18n="rt_col_score">Score</th>
+                            <th style="width: 45%" data-i18n="rt_col_reason">Root Cause Analysis</th>
                         </tr>
                     </thead>
                     <tbody id="rtAlertsBody">
-                        <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);">Đang lắng nghe log real-time...</td></tr>
+                        <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);" data-i18n="rt_listening">Listening for real-time logs...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -326,13 +362,316 @@
 
 <script>
 // ===========================================================================
-// State
+// State & i18n
 // ===========================================================================
 let autoRefreshInterval = null;
 let dashboardData = null;
 let historyData = null;
 let currentDateFrom = null;
 let currentDateTo = null;
+let currentLang = 'en';
+let _lastDataHash = null; // For skipping redundant renders
+
+// ---------------------------------------------------------------------------
+// TRANSLATIONS — Complete EN/VI with clear separation
+// Technical terms kept in English: PCA, Isolation Forest, CRITICAL, HIGH,
+// User ID, Anomaly Score, PC1/PC2, Pearson, sigma (σ), UEBA, Baseline
+// ---------------------------------------------------------------------------
+const TRANSLATIONS = {
+    en: {
+        loading_text: "Analyzing data...",
+        header_title: "UEBA Insider Threat Dashboard",
+        header_subtitle: "Multi-Log Correlation & Anomaly Detection — AI-Driven Enterprise Security",
+        pipeline_active: "Pipeline Active",
+        auto_refresh: "Real-time Sync",
+        btn_refresh: "Analyze",
+        btn_run_profiling: "⚙️ Run Baseline Profiling",
+        tab_batch: "📊 Analysis & History",
+        tab_realtime: "Live Threat Feed",
+        filter_label: "Filter by Date",
+        filter_submit: "Filter",
+        filter_clear: "View All",
+        filter_info: "Viewing:",
+        filter_all: "ALL",
+        card_total_users: "Total Analyzed Users",
+        card_anomalous_users: "Anomalous Users",
+        card_normal_users: "Normal Users",
+        card_anomaly_rate: "Anomaly Detection Rate",
+        pca_title: "PCA Clustering Plot",
+        pca_subtitle: "Projecting behavioral features to 2D — Each point is a user",
+        radar_title: "Radar — High-risk User Behavior Profile",
+        radar_subtitle: "Comparing Top-5 anomalous users vs. organizational average",
+        bar_title: "Anomaly Score Ranking",
+        bar_subtitle: "Anomaly score (Isolation Forest) — More negative = More anomalous",
+        heatmap_title: "Heatmap — Behavioral Feature Correlation",
+        heatmap_subtitle: "Pearson correlation matrix of behavioral features",
+        table_title: "Insider Threat Candidates",
+        table_subtitle: "Users flagged as anomalous, sorted by descending severity",
+        hist_total_alerts: "Total Alerts",
+        hist_critical_count: "Critical Alerts",
+        hist_unique_users: "Flagged Users",
+        hist_timeline_title: "Alert Timeline",
+        hist_timeline_subtitle: "Alert count over time — real-time updates",
+        hist_severity_title: "Severity Distribution",
+        hist_severity_subtitle: "CRITICAL vs HIGH ratio",
+        hist_table_title: "Detailed Alert History",
+        hist_table_subtitle: "All recorded alerts, updated real-time",
+        hist_col_time: "Timestamp",
+        hist_col_severity: "Severity",
+        hist_col_user: "User ID",
+        hist_col_score: "Score",
+        hist_col_reason: "Root Cause Analysis",
+        empty_title: "No alerts recorded",
+        empty_hint: "Data will automatically update when anomalous behaviors are detected",
+        rt_new_alerts: "New Live Alerts",
+        rt_status: "Online Detector Status",
+        rt_title: "Live Alert Feed",
+        rt_subtitle: "Auto-pushed alerts from the Online Detection system",
+        rt_col_time: "Timestamp",
+        rt_col_severity: "Severity",
+        rt_col_user: "User ID",
+        rt_col_score: "Score",
+        rt_col_reason: "Root Cause Analysis (Deviation Details)",
+        rt_listening: "Listening for real-time logs...",
+        // Dynamic text
+        updated_prefix: "Updated: ",
+        table_rank: "Rank",
+        table_user: "User ID",
+        table_score: "Anomaly Score",
+        pca_normal: "Normal",
+        pca_anomalous: "⚠️ Anomalous",
+        pca_variance: "variance",
+        radar_org_avg: "Organizational Average",
+        confirm_profiling: "Running Baseline Profiling will read all historical logs and retrain the model. Proceed?",
+        profiling_running: "⏳ Running...",
+        profiling_done: "Profiling completed.",
+        profiling_error: "Error running profiling!",
+        no_anomalies: "✅ No anomalous users detected with current threshold.",
+        ws_connected: "Connected (Online)",
+        ws_disconnected: "Disconnected (Offline)",
+        no_db_alerts: "No alerts in DB. Listening for real-time logs...",
+        no_history_data: "No alert data available",
+        no_history_range: "No alerts in this time range",
+        no_history_hint: "Try selecting a different date range or view all",
+        severity_critical: "CRITICAL",
+        severity_high: "HIGH",
+        observed: "Observed",
+        typical: "Typical",
+        deviation: "Deviation",
+        alert_desc_default: "Anomalous behavior detected compared to baseline",
+        timeline_x: "Time",
+        timeline_y: "Alerts",
+        timeline_hover: "Alerts",
+        severity_total: "total",
+        severity_count: "Count",
+        severity_ratio: "Ratio",
+        filter_from: "From ",
+        filter_to: "To ",
+    },
+    vi: {
+        loading_text: "Đang phân tích dữ liệu...",
+        header_title: "Bảng điều khiển phát hiện mối đe dọa nội bộ",
+        header_subtitle: "Phân tích tương quan Multi-Log & Phát hiện bất thường — Bảo mật AI doanh nghiệp",
+        pipeline_active: "Đang hoạt động",
+        auto_refresh: "Đồng bộ thời gian thực",
+        btn_refresh: "Phân tích",
+        btn_run_profiling: "⚙️ Khởi tạo Baseline Profiling",
+        tab_batch: "📊 Phân tích & Lịch sử",
+        tab_realtime: "Luồng cảnh báo trực tiếp",
+        filter_label: "Lọc theo ngày",
+        filter_submit: "Lọc",
+        filter_clear: "Xem tất cả",
+        filter_info: "Đang xem:",
+        filter_all: "Tất cả",
+        card_total_users: "Tổng người dùng phân tích",
+        card_anomalous_users: "Người dùng bất thường",
+        card_normal_users: "Người dùng bình thường",
+        card_anomaly_rate: "Tỷ lệ phát hiện bất thường",
+        pca_title: "Biểu đồ phân cụm PCA",
+        pca_subtitle: "Chiếu đặc trưng hành vi xuống 2 chiều — Mỗi điểm là 1 người dùng",
+        radar_title: "Radar — Hồ sơ hành vi người dùng nguy cơ cao",
+        radar_subtitle: "So sánh Top-5 người dùng bất thường với mức trung bình tổ chức",
+        bar_title: "Xếp hạng mức độ bất thường",
+        bar_subtitle: "Điểm Anomaly Score (Isolation Forest) — Càng âm = Càng nguy hiểm",
+        heatmap_title: "Heatmap — Tương quan đặc trưng hành vi",
+        heatmap_subtitle: "Ma trận tương quan Pearson giữa các đặc trưng hành vi",
+        table_title: "Ứng viên đe dọa nội bộ",
+        table_subtitle: "Danh sách người dùng bị gắn cờ bất thường, xếp theo mức nguy hiểm giảm dần",
+        hist_total_alerts: "Tổng cảnh báo",
+        hist_critical_count: "Nghiêm trọng (Critical)",
+        hist_unique_users: "Người dùng bị cảnh báo",
+        hist_timeline_title: "Timeline cảnh báo",
+        hist_timeline_subtitle: "Số lượng cảnh báo theo thời gian — cập nhật trực tiếp",
+        hist_severity_title: "Phân bố mức độ",
+        hist_severity_subtitle: "Tỷ lệ CRITICAL / HIGH",
+        hist_table_title: "Lịch sử cảnh báo chi tiết",
+        hist_table_subtitle: "Toàn bộ cảnh báo đã ghi nhận, cập nhật trực tiếp",
+        hist_col_time: "Thời gian",
+        hist_col_severity: "Mức độ",
+        hist_col_user: "User ID",
+        hist_col_score: "Điểm",
+        hist_col_reason: "Phân tích nguyên nhân",
+        empty_title: "Chưa có cảnh báo nào",
+        empty_hint: "Dữ liệu sẽ tự động cập nhật khi phát hiện hành vi bất thường",
+        rt_new_alerts: "Cảnh báo trực tiếp mới",
+        rt_status: "Trạng thái bộ phát hiện",
+        rt_title: "Luồng cảnh báo trực tiếp",
+        rt_subtitle: "Cảnh báo tự động đẩy về từ hệ thống phát hiện trực tuyến",
+        rt_col_time: "Thời gian",
+        rt_col_severity: "Mức độ",
+        rt_col_user: "User ID",
+        rt_col_score: "Điểm",
+        rt_col_reason: "Phân tích nguyên nhân (chi tiết sai lệch)",
+        rt_listening: "Đang lắng nghe log trực tiếp...",
+        // Dynamic text
+        updated_prefix: "Cập nhật: ",
+        table_rank: "Hạng",
+        table_user: "User ID",
+        table_score: "Anomaly Score",
+        pca_normal: "Bình thường",
+        pca_anomalous: "⚠️ Bất thường",
+        pca_variance: "phương sai",
+        radar_org_avg: "Trung bình tổ chức",
+        confirm_profiling: "Chạy Baseline Profiling sẽ đọc toàn bộ log lịch sử và huấn luyện lại model. Chạy ngay?",
+        profiling_running: "⏳ Đang chạy...",
+        profiling_done: "Hoàn tất Profiling.",
+        profiling_error: "Lỗi khi chạy profiling!",
+        no_anomalies: "✅ Không phát hiện người dùng bất thường với ngưỡng hiện tại.",
+        ws_connected: "Đã kết nối (Online)",
+        ws_disconnected: "Mất kết nối (Offline)",
+        no_db_alerts: "Chưa có cảnh báo nào trong DB. Đang lắng nghe log trực tiếp...",
+        no_history_data: "Chưa có dữ liệu cảnh báo",
+        no_history_range: "Không có cảnh báo trong khoảng thời gian này",
+        no_history_hint: "Thử chọn khoảng ngày khác hoặc xem tất cả",
+        severity_critical: "NGHIÊM TRỌNG",
+        severity_high: "CẢNH BÁO",
+        observed: "Ghi nhận",
+        typical: "Thông thường",
+        deviation: "Vượt ngưỡng",
+        alert_desc_default: "Phát hiện hành vi dị thường so với baseline",
+        timeline_x: "Thời gian",
+        timeline_y: "Số cảnh báo",
+        timeline_hover: "Cảnh báo",
+        severity_total: "tổng",
+        severity_count: "Số lượng",
+        severity_ratio: "Tỷ lệ",
+        filter_from: "Từ ",
+        filter_to: "Đến ",
+    }
+};
+
+// Helper function for translations
+function t(key) {
+    return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) || key;
+}
+
+const FEATURE_MAPS = {
+    en: {
+        "total_logins": "Total Logins",
+        "off_hour_logins": "Off-hour Logins",
+        "total_usb_connects": "USB Connections",
+        "off_hour_usb": "Off-hour USB",
+        "total_emails": "Sent Emails",
+        "external_emails": "External Emails",
+        "total_file_access": "File Access Events",
+        "exe_zip_downloads": "EXE/ZIP Actions",
+        "total_http_requests": "HTTP Requests",
+        "off_hour_http": "Off-hour Web Browsing",
+        "o_score": "Openness (O)",
+        "c_score": "Conscientiousness (C)",
+        "e_score": "Extraversion (E)",
+        "a_score": "Agreeableness (A)",
+        "n_score": "Neuroticism (N)",
+        "role_changes": "Role Changes"
+    },
+    vi: {
+        "total_logins": "Số lần đăng nhập",
+        "off_hour_logins": "Đăng nhập ngoài giờ",
+        "total_usb_connects": "Số lần kết nối USB",
+        "off_hour_usb": "USB ngoài giờ",
+        "total_emails": "Số email gửi đi",
+        "external_emails": "Email gửi ra ngoài",
+        "total_file_access": "Số lần truy cập file",
+        "exe_zip_downloads": "Thao tác EXE/ZIP",
+        "total_http_requests": "Số lượt duyệt web",
+        "off_hour_http": "Duyệt web ngoài giờ",
+        "o_score": "Cởi mở (O)",
+        "c_score": "Tận tụy (C)",
+        "e_score": "Hướng ngoại (E)",
+        "a_score": "Dễ chịu (A)",
+        "n_score": "Bất ổn (N)",
+        "role_changes": "Thay đổi vai trò"
+    }
+};
+
+const FEATURE_MAPS_SHORT = {
+    en: {
+        "total_logins": "Logins",
+        "off_hour_logins": "Offhr Login",
+        "total_usb_connects": "USB",
+        "off_hour_usb": "Offhr USB",
+        "total_emails": "Emails",
+        "external_emails": "Ext Email",
+        "total_file_access": "Files",
+        "exe_zip_downloads": "ZIP/EXE",
+        "total_http_requests": "HTTP",
+        "off_hour_http": "Offhr Web",
+        "o_score": "O",
+        "c_score": "C",
+        "e_score": "E",
+        "a_score": "A",
+        "n_score": "N",
+        "role_changes": "Roles"
+    },
+    vi: {
+        "total_logins": "Đăng nhập",
+        "off_hour_logins": "ĐN ngoài giờ",
+        "total_usb_connects": "USB",
+        "off_hour_usb": "USB ngoài giờ",
+        "total_emails": "Email",
+        "external_emails": "Email ngoài",
+        "total_file_access": "File",
+        "exe_zip_downloads": "ZIP/EXE",
+        "total_http_requests": "Web",
+        "off_hour_http": "Web ngoài giờ",
+        "o_score": "O",
+        "c_score": "C",
+        "e_score": "E",
+        "a_score": "A",
+        "n_score": "N",
+        "role_changes": "Vai trò"
+    }
+};
+
+let FEATURE_MAP = {};
+let FEATURE_MAP_SHORT = {};
+
+function changeLanguage(lang) {
+    currentLang = lang;
+    
+    FEATURE_MAP = { ...FEATURE_MAPS[lang] };
+    FEATURE_MAP_SHORT = { ...FEATURE_MAPS_SHORT[lang] };
+    
+    // Update button states
+    document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`lang-${lang}`).classList.add('active');
+    
+    // Translate all static data-i18n elements
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) {
+            el.textContent = TRANSLATIONS[lang][key];
+        }
+    });
+
+    // Re-render dynamic content
+    if (dashboardData) {
+        renderAll(dashboardData);
+    }
+    if (historyData) {
+        renderHistorySection(historyData);
+    }
+}
 
 // Plotly shared layout defaults (dark theme)
 const PLOTLY_LAYOUT_BASE = {
@@ -358,10 +697,10 @@ const PLOTLY_CONFIG = {
 };
 
 // ===========================================================================
-// Fetch Data
+// Fetch Data — now from /api/live-analysis (live log, NOT dataset)
 // ===========================================================================
 async function fetchData() {
-    const resp = await fetch('/api/data');
+    const resp = await fetch('/api/live-analysis');
     return resp.json();
 }
 
@@ -370,7 +709,6 @@ async function fetchAlerts() {
         const resp = await fetch('/api/alerts?limit=50');
         const data = await resp.json();
         if (data.alerts && data.alerts.length > 0) {
-            // Track known IDs to avoid duplicates in polling
             data.alerts.forEach(alert => {
                 if (alert.id) {
                     knownAlertIds.add(alert.id);
@@ -378,7 +716,6 @@ async function fetchAlerts() {
                 }
             });
 
-            // Reverse so oldest is added first, meaning newest will be at top when we prepend
             data.alerts.reverse().forEach(alert => {
                 const formattedAlert = {
                     timestamp: alert.timestamp,
@@ -392,7 +729,7 @@ async function fetchAlerts() {
             });
         } else {
             const tbody = document.getElementById('rtAlertsBody');
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);">Chưa có cảnh báo nào trong DB. Đang lắng nghe log real-time...</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);">${t('no_db_alerts')}</td></tr>`;
         }
     } catch (e) {
         console.error('Fetch alerts failed:', e);
@@ -405,8 +742,9 @@ async function refreshData() {
     document.getElementById('loadingOverlay').classList.add('active');
 
     try {
-        const resp = await fetch('/api/refresh', { method: 'POST' });
+        const resp = await fetch('/api/live-analysis?refresh=true');
         dashboardData = await resp.json();
+        _lastDataHash = null; // Force render
         renderAll(dashboardData);
     } catch (e) {
         console.error('Refresh failed:', e);
@@ -417,10 +755,29 @@ async function refreshData() {
 }
 
 // ===========================================================================
+// Simple hash for change detection
+// ===========================================================================
+function quickHash(obj) {
+    const str = JSON.stringify(obj.summary || {});
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
+// ===========================================================================
 // Render All
 // ===========================================================================
 function renderAll(data) {
     dashboardData = data;
+
+    // Skip if data hasn't changed (performance optimization)
+    const hash = quickHash(data);
+    if (hash === _lastDataHash) return;
+    _lastDataHash = hash;
+
     renderSummaryCards(data.summary);
     renderPCAChart(data);
     renderRadarChart(data);
@@ -428,13 +785,14 @@ function renderAll(data) {
     renderHeatmap(data);
     renderThreatsTable(data);
     document.getElementById('lastUpdated').textContent =
-        'Cập nhật: ' + (data.last_updated || '—');
+        t('updated_prefix') + (data.last_updated || '—');
 }
 
 // ===========================================================================
 // Summary Cards
 // ===========================================================================
 function renderSummaryCards(summary) {
+    if (!summary) return;
     animateNumber('cardTotal', summary.total_users);
     animateNumber('cardAnomalous', summary.anomalous_users);
     animateNumber('cardNormal', summary.normal_users);
@@ -443,9 +801,11 @@ function renderSummaryCards(summary) {
 
 function animateNumber(id, target) {
     const el = document.getElementById(id);
+    if (!target && target !== 0) return;
     const duration = 600;
     const start = parseInt(el.textContent) || 0;
     const diff = target - start;
+    if (diff === 0) { el.textContent = target; return; }
     const startTime = performance.now();
 
     function step(currentTime) {
@@ -459,19 +819,20 @@ function animateNumber(id, target) {
 }
 
 // ===========================================================================
-// PCA Scatter
+// PCA Scatter — uses Plotly.react for performance
 // ===========================================================================
 function renderPCAChart(data) {
+    if (!data.users || data.users.length === 0) return;
     const normal = data.users.filter(u => u.anomaly_label === 1);
     const anomalous = data.users.filter(u => u.anomaly_label === -1);
-
     const featureNames = data.feature_names || [];
 
     function buildHoverText(users) {
         return users.map(u => {
             let lines = [`<b>${u.user}</b>`, `Score: ${u.anomaly_score}`];
             featureNames.forEach(f => {
-                lines.push(`${f}: ${u[f]}`);
+                const label = FEATURE_MAP[f] || f;
+                lines.push(`${label}: ${u[f]}`);
             });
             return lines.join('<br>');
         });
@@ -481,15 +842,10 @@ function renderPCAChart(data) {
         x: normal.map(u => u.pc1),
         y: normal.map(u => u.pc2),
         mode: 'markers',
-        name: 'Bình thường',
+        name: t('pca_normal'),
         text: buildHoverText(normal),
         hoverinfo: 'text',
-        marker: {
-            color: '#10b981',
-            size: 8,
-            opacity: 0.7,
-            line: { width: 0 },
-        },
+        marker: { color: '#10b981', size: 8, opacity: 0.7, line: { width: 0 } },
         type: 'scatter',
     };
 
@@ -497,70 +853,49 @@ function renderPCAChart(data) {
         x: anomalous.map(u => u.pc1),
         y: anomalous.map(u => u.pc2),
         mode: 'markers+text',
-        name: '⚠️ Bất thường',
+        name: t('pca_anomalous'),
         text: anomalous.map(u => u.user),
         textposition: 'top center',
         textfont: { size: 10, color: '#f8f8f2', family: 'JetBrains Mono' },
         hovertext: buildHoverText(anomalous),
         hoverinfo: 'text',
-        marker: {
-            color: '#ef4444',
-            size: 14,
-            opacity: 0.95,
-            line: { width: 1.5, color: '#fff' },
-            symbol: 'diamond',
-        },
+        marker: { color: '#ef4444', size: 14, opacity: 0.95, line: { width: 1.5, color: '#fff' }, symbol: 'diamond' },
         type: 'scatter',
     };
 
     const layout = {
         ...PLOTLY_LAYOUT_BASE,
-        xaxis: {
-            ...PLOTLY_LAYOUT_BASE.xaxis,
-            title: { text: `PC1 (${data.pca.pc1_var}% phương sai)`, font: { size: 12 } },
-        },
-        yaxis: {
-            ...PLOTLY_LAYOUT_BASE.yaxis,
-            title: { text: `PC2 (${data.pca.pc2_var}% phương sai)`, font: { size: 12 } },
-        },
-        legend: {
-            x: 1, y: 1, xanchor: 'right',
-            bgcolor: 'rgba(26,31,46,0.85)',
-            bordercolor: 'rgba(42,48,64,0.6)',
-            borderwidth: 1,
-            font: { color: '#e8ecf4', size: 11 },
-        },
+        xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: { text: `PC1 (${data.pca.pc1_var}% ${t('pca_variance')})`, font: { size: 12 } } },
+        yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: { text: `PC2 (${data.pca.pc2_var}% ${t('pca_variance')})`, font: { size: 12 } } },
+        legend: { x: 1, y: 1, xanchor: 'right', bgcolor: 'rgba(26,31,46,0.85)', bordercolor: 'rgba(42,48,64,0.6)', borderwidth: 1, font: { color: '#e8ecf4', size: 11 } },
         showlegend: true,
     };
 
-    Plotly.newPlot('pcaChart', [traceNormal, traceAnomaly], layout, PLOTLY_CONFIG);
+    Plotly.react('pcaChart', [traceNormal, traceAnomaly], layout, PLOTLY_CONFIG);
 }
 
 // ===========================================================================
 // Radar Chart
 // ===========================================================================
 function renderRadarChart(data) {
+    if (!data.users || data.users.length === 0) return;
     const featureNames = data.feature_names;
-    const avgValues = featureNames.map(f => data.feature_averages[f] || 0);
-
-    // Normalise to 0–100 scale for radar readability
     const maxVals = {};
     featureNames.forEach(f => {
         maxVals[f] = Math.max(...data.users.map(u => u[f] || 0), 1);
     });
 
     const normAvg = featureNames.map(f => (data.feature_averages[f] / maxVals[f]) * 100);
-
     const traces = [];
 
     // Average baseline
     traces.push({
         type: 'scatterpolar',
         r: [...normAvg, normAvg[0]],
-        theta: [...featureNames, featureNames[0]],
+        theta: [...featureNames.map(f => FEATURE_MAP[f] || f), FEATURE_MAP[featureNames[0]] || featureNames[0]],
         fill: 'toself',
         fillcolor: 'rgba(59,130,246,0.08)',
-        name: 'Trung bình tổ chức',
+        name: t('radar_org_avg'),
         line: { color: '#3b82f6', width: 2, dash: 'dot' },
         marker: { size: 4 },
     });
@@ -574,7 +909,7 @@ function renderRadarChart(data) {
         traces.push({
             type: 'scatterpolar',
             r: [...normUser, normUser[0]],
-            theta: [...featureNames, featureNames[0]],
+            theta: [...featureNames.map(f => FEATURE_MAP[f] || f), FEATURE_MAP[featureNames[0]] || featureNames[0]],
             fill: 'toself',
             fillcolor: colors[i] + '0D',
             name: user.user,
@@ -587,37 +922,22 @@ function renderRadarChart(data) {
         ...PLOTLY_LAYOUT_BASE,
         polar: {
             bgcolor: '#111827',
-            radialaxis: {
-                visible: true,
-                range: [0, 105],
-                gridcolor: 'rgba(42,48,64,0.5)',
-                linecolor: 'rgba(42,48,64,0.5)',
-                tickfont: { size: 9, color: '#5a6478' },
-            },
-            angularaxis: {
-                gridcolor: 'rgba(42,48,64,0.5)',
-                linecolor: 'rgba(42,48,64,0.5)',
-                tickfont: { size: 10, color: '#8b95a8' },
-            },
+            radialaxis: { visible: true, range: [0, 105], gridcolor: 'rgba(42,48,64,0.5)', linecolor: 'rgba(42,48,64,0.5)', tickfont: { size: 9, color: '#5a6478' } },
+            angularaxis: { gridcolor: 'rgba(42,48,64,0.5)', linecolor: 'rgba(42,48,64,0.5)', tickfont: { size: 10, color: '#8b95a8' } },
         },
-        legend: {
-            x: 1.05, y: 1,
-            bgcolor: 'rgba(26,31,46,0.85)',
-            bordercolor: 'rgba(42,48,64,0.6)',
-            borderwidth: 1,
-            font: { color: '#e8ecf4', size: 10 },
-        },
+        legend: { x: 1.05, y: 1, bgcolor: 'rgba(26,31,46,0.85)', bordercolor: 'rgba(42,48,64,0.6)', borderwidth: 1, font: { color: '#e8ecf4', size: 10 } },
         showlegend: true,
         margin: { l: 80, r: 100, t: 32, b: 48 },
     };
 
-    Plotly.newPlot('radarChart', traces, layout, PLOTLY_CONFIG);
+    Plotly.react('radarChart', traces, layout, PLOTLY_CONFIG);
 }
 
 // ===========================================================================
 // Bar Chart — Anomaly Scores
 // ===========================================================================
 function renderBarChart(data) {
+    if (!data.anomalies || data.anomalies.length === 0) return;
     const anomalies = data.anomalies;
 
     const barColors = anomalies.map(a => {
@@ -630,111 +950,71 @@ function renderBarChart(data) {
         x: anomalies.map(a => a.user),
         y: anomalies.map(a => a.anomaly_score),
         type: 'bar',
-        marker: {
-            color: barColors,
-            line: { width: 0 },
-            opacity: 0.9,
-        },
+        marker: { color: barColors, line: { width: 0 }, opacity: 0.9 },
         hovertemplate: '<b>%{x}</b><br>Score: %{y:.4f}<extra></extra>',
     };
 
     const layout = {
         ...PLOTLY_LAYOUT_BASE,
-        xaxis: {
-            ...PLOTLY_LAYOUT_BASE.xaxis,
-            title: { text: 'User ID', font: { size: 12 } },
-            tickfont: { size: 10, family: 'JetBrains Mono' },
-        },
-        yaxis: {
-            ...PLOTLY_LAYOUT_BASE.yaxis,
-            title: { text: 'Anomaly Score', font: { size: 12 } },
-        },
+        xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: { text: 'User ID', font: { size: 12 } }, tickfont: { size: 10, family: 'JetBrains Mono' } },
+        yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: { text: 'Anomaly Score', font: { size: 12 } } },
         showlegend: false,
     };
 
-    Plotly.newPlot('barChart', [trace], layout, PLOTLY_CONFIG);
+    Plotly.react('barChart', [trace], layout, PLOTLY_CONFIG);
 }
 
 // ===========================================================================
 // Heatmap — Feature Correlation
 // ===========================================================================
 function renderHeatmap(data) {
+    if (!data.correlation || !data.correlation.labels) return;
     const corr = data.correlation;
-
-    // Shorten label names for display
-    const shortLabels = corr.labels.map(l => {
-        return l.replace('total_', '').replace('off_hour_', 'offhr_')
-               .replace('_connects', '_usb').replace('_downloads', '_dl')
-               .replace('_access', '_acc').replace('_emails', '_em');
-    });
+    const shortLabels = corr.labels.map(l => FEATURE_MAP_SHORT[l] || l);
 
     const trace = {
-        z: corr.values,
-        x: shortLabels,
-        y: shortLabels,
+        z: corr.values, x: shortLabels, y: shortLabels,
         type: 'heatmap',
-        colorscale: [
-            [0, '#1e3a5f'],
-            [0.25, '#1a4d6e'],
-            [0.5, '#111827'],
-            [0.75, '#7c3a1a'],
-            [1, '#ef4444'],
-        ],
-        zmin: -1,
-        zmax: 1,
+        colorscale: [[0, '#1e3a5f'], [0.25, '#1a4d6e'], [0.5, '#111827'], [0.75, '#7c3a1a'], [1, '#ef4444']],
+        zmin: -1, zmax: 1,
         hoverongaps: false,
         hovertemplate: '%{x} × %{y}<br>Correlation: %{z:.3f}<extra></extra>',
-        colorbar: {
-            title: { text: 'r', font: { size: 11, color: '#8b95a8' } },
-            tickfont: { size: 10, color: '#8b95a8' },
-            outlinewidth: 0,
-            len: 0.8,
-        },
+        colorbar: { title: { text: 'r', font: { size: 11, color: '#8b95a8' } }, tickfont: { size: 10, color: '#8b95a8' }, outlinewidth: 0, len: 0.8 },
     };
 
     const layout = {
         ...PLOTLY_LAYOUT_BASE,
-        xaxis: {
-            ...PLOTLY_LAYOUT_BASE.xaxis,
-            tickfont: { size: 10, color: '#8b95a8', family: 'JetBrains Mono' },
-            tickangle: -45,
-        },
-        yaxis: {
-            ...PLOTLY_LAYOUT_BASE.yaxis,
-            tickfont: { size: 10, color: '#8b95a8', family: 'JetBrains Mono' },
-            autorange: 'reversed',
-        },
+        xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, tickfont: { size: 10, color: '#8b95a8', family: 'JetBrains Mono' }, tickangle: -45 },
+        yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, tickfont: { size: 10, color: '#8b95a8', family: 'JetBrains Mono' }, autorange: 'reversed' },
         margin: { l: 100, r: 40, t: 24, b: 90 },
     };
 
-    Plotly.newPlot('heatmapChart', [trace], layout, PLOTLY_CONFIG);
+    Plotly.react('heatmapChart', [trace], layout, PLOTLY_CONFIG);
 }
 
 // ===========================================================================
 // Threats Table
 // ===========================================================================
 function renderThreatsTable(data) {
+    if (!data.feature_names) return;
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
     const featureNames = data.feature_names;
     const anomalies = data.anomalies;
 
-    // Build header
-    let headHTML = '<th>Hạng</th><th>User ID</th><th>Anomaly Score</th>';
+    let headHTML = `<th>${t('table_rank')}</th><th>${t('table_user')}</th><th>${t('table_score')}</th>`;
     featureNames.forEach(f => {
-        headHTML += `<th>${f}</th>`;
+        headHTML += `<th>${FEATURE_MAP[f] || f}</th>`;
     });
     thead.innerHTML = headHTML;
 
-    // Build body
-    if (anomalies.length === 0) {
+    if (!anomalies || anomalies.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${3 + featureNames.length}" style="text-align:center;padding:32px;color:var(--accent-green);">
-            ✅ Không phát hiện người dùng bất thường với ngưỡng hiện tại.
+            ${t('no_anomalies')}
         </td></tr>`;
         return;
     }
 
-    // Compute per-feature max for highlighting
     const featureMax = {};
     featureNames.forEach(f => {
         featureMax[f] = Math.max(...data.users.map(u => u[f] || 0));
@@ -743,7 +1023,6 @@ function renderThreatsTable(data) {
     let bodyHTML = '';
     anomalies.forEach(a => {
         const rankClass = a.rank <= 3 ? `rank-${a.rank}` : 'rank-default';
-
         let featureCells = '';
         featureNames.forEach(f => {
             const val = a[f];
@@ -766,63 +1045,34 @@ function renderThreatsTable(data) {
 }
 
 // ===========================================================================
-// Auto-refresh
+// Auto-refresh — optimized intervals
 // ===========================================================================
-let historyRefreshInterval = null;
+let isRealTimeSyncEnabled = true;
 let liveAlertsPollInterval = null;
+let wsConnected = false;
 
 function startAutoRefresh() {
-    stopAutoRefresh();
-    // Refresh batch data every 30s
-    autoRefreshInterval = setInterval(async () => {
-        try {
-            const data = await fetchData();
-            renderAll(data);
-        } catch (e) {
-            console.error('Auto-refresh error:', e);
-        }
-    }, 30000);
-
-    // Refresh history charts every 15s
-    historyRefreshInterval = setInterval(async () => {
-        try {
-            await fetchHistory(currentDateFrom, currentDateTo);
-        } catch (e) {
-            console.error('History refresh error:', e);
-        }
-    }, 15000);
-
-    // Poll live alerts from DB every 10s (fallback for WebSocket)
-    liveAlertsPollInterval = setInterval(async () => {
-        try {
-            await pollLiveAlerts();
-        } catch (e) {
-            console.error('Live alerts poll error:', e);
-        }
-    }, 10000);
+    isRealTimeSyncEnabled = true;
+    // Fallback poll live alerts from DB every 15s — only if WebSocket is NOT connected
+    if (!liveAlertsPollInterval) {
+        liveAlertsPollInterval = setInterval(async () => {
+            if (wsConnected) return; 
+            try {
+                await pollLiveAlerts();
+            } catch (e) {
+                console.error('Live alerts poll error:', e);
+            }
+        }, 15000);
+    }
 }
 
 function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-    }
-    if (historyRefreshInterval) {
-        clearInterval(historyRefreshInterval);
-        historyRefreshInterval = null;
-    }
-    if (liveAlertsPollInterval) {
-        clearInterval(liveAlertsPollInterval);
-        liveAlertsPollInterval = null;
-    }
+    isRealTimeSyncEnabled = false;
+    if (liveAlertsPollInterval) { clearInterval(liveAlertsPollInterval); liveAlertsPollInterval = null; }
 }
 
 document.getElementById('autoRefreshToggle').addEventListener('change', function () {
-    if (this.checked) {
-        startAutoRefresh();
-    } else {
-        stopAutoRefresh();
-    }
+    if (this.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
 });
 
 // ===========================================================================
@@ -833,20 +1083,53 @@ let rtAlertCount = 0;
 
 socket.on('connect', () => {
     console.log('Connected to Real-time Stream');
-    document.getElementById('rtDetectorStatus').textContent = 'Kết nối (Online)';
+    wsConnected = true;
+    document.getElementById('rtDetectorStatus').textContent = t('ws_connected');
 });
 
 socket.on('disconnect', () => {
-    document.getElementById('rtDetectorStatus').textContent = 'Mất kết nối (Offline)';
+    wsConnected = false;
+    document.getElementById('rtDetectorStatus').textContent = t('ws_disconnected');
 });
+
+let updateThrottleTimer = null;
+let pendingUpdate = false;
+
+// Lắng nghe sự kiện data_updated từ backend để cập nhật toàn bộ biểu đồ (< 0.2s)
+socket.on('data_updated', async (data) => {
+    if (!isRealTimeSyncEnabled) return;
+    
+    if (updateThrottleTimer) {
+        pendingUpdate = true;
+        return;
+    }
+    
+    executeUpdate();
+    
+    updateThrottleTimer = setTimeout(() => {
+        updateThrottleTimer = null;
+        if (pendingUpdate) {
+            pendingUpdate = false;
+            executeUpdate();
+        }
+    }, 1000); // Tối đa 1 lần vẽ/giây, giảm tải cho backend
+});
+
+async function executeUpdate() {
+    try {
+        const newData = await fetchData();
+        renderAll(newData);
+    } catch (e) {
+        console.error('Real-time sync error:', e);
+    }
+}
 
 socket.on('new_alert', (alertData) => {
     renderSingleAlert(alertData, true);
-    // Also update the history tab in real-time
     injectAlertIntoHistory(alertData);
 });
 
-// Track last known alert ID so polling doesn't add duplicates
+// Track last known alert ID
 let lastKnownAlertId = 0;
 let knownAlertIds = new Set();
 
@@ -856,16 +1139,10 @@ async function pollLiveAlerts() {
         const data = await resp.json();
         if (!data.alerts || data.alerts.length === 0) return;
 
-        const tbody = document.getElementById('rtAlertsBody');
-
-        // Process alerts newest first, check for duplicates
-        let newAlertsFound = false;
         data.alerts.forEach(alert => {
             const alertId = alert.id;
             if (alertId && !knownAlertIds.has(alertId)) {
                 knownAlertIds.add(alertId);
-                newAlertsFound = true;
-
                 const formattedAlert = {
                     timestamp: alert.timestamp,
                     severity: alert.severity,
@@ -874,8 +1151,6 @@ async function pollLiveAlerts() {
                     description: alert.description,
                     deviations: alert.feature_deviations
                 };
-
-                // Only render if this is truly new (not from initial load)
                 if (lastKnownAlertId > 0 && alertId > lastKnownAlertId) {
                     renderSingleAlert(formattedAlert, true);
                     injectAlertIntoHistory(formattedAlert);
@@ -883,10 +1158,8 @@ async function pollLiveAlerts() {
             }
         });
 
-        // Update the high-water mark
         const maxId = Math.max(...data.alerts.map(a => a.id || 0));
         if (maxId > lastKnownAlertId) lastKnownAlertId = maxId;
-
     } catch (e) {
         console.error('Poll alerts error:', e);
     }
@@ -900,30 +1173,18 @@ function renderSingleAlert(alertData, isNew) {
     
     const tbody = document.getElementById('rtAlertsBody');
     if(tbody.querySelector('td[colspan]')) {
-        tbody.innerHTML = ''; // Clear empty message
+        tbody.innerHTML = '';
     }
     
-    const FEATURE_NAMES_VI = {
-        "total_logins": "Số lần đăng nhập",
-        "off_hour_logins": "Đăng nhập ngoài giờ",
-        "total_usb_connects": "Số lần cắm USB",
-        "off_hour_usb": "Cắm USB ngoài giờ",
-        "total_emails": "Số email gửi đi",
-        "external_emails": "Gửi email ra ngoài (External)",
-        "total_file_access": "Số lần truy cập file",
-        "exe_zip_downloads": "Tải file EXE/ZIP"
-    };
-
-    // Format deviations
     let devHTML = '<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">';
     if (alertData.deviations) {
         for (const [feat, data] of Object.entries(alertData.deviations)) {
-            const featVi = FEATURE_NAMES_VI[feat] || feat;
+            const featLabel = FEATURE_MAP[feat] || feat;
             devHTML += `<div style="background:rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 6px 10px; border-radius: 0 4px 4px 0;">
-                <div style="color: #fca5a5; font-weight: 600; margin-bottom: 2px;">${featVi}</div>
+                <div style="color: #fca5a5; font-weight: 600; margin-bottom: 2px;">${featLabel}</div>
                 <div style="font-size: 11px;">
-                    <span style="color: #fff;">Ghi nhận: <b>${data.observed}</b></span> 
-                    <span style="color: #94a3b8; margin-left: 4px;">(Thông thường: ${data.mean} | Vượt ngưỡng: ${data.deviation_sigma}σ)</span>
+                    <span style="color: #fff;">${t('observed')}: <b>${data.observed}</b></span> 
+                    <span style="color: #94a3b8; margin-left: 4px;">(${t('typical')}: ${data.mean} | ${t('deviation')}: ${data.deviation_sigma}σ)</span>
                 </div>
             </div>`;
         }
@@ -931,7 +1192,7 @@ function renderSingleAlert(alertData, isNew) {
     devHTML += '</div>';
     
     const badgeClass = alertData.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
-    const severityLabel = alertData.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+    const severityLabel = alertData.severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
     
     const tr = document.createElement('tr');
     tr.style.animation = 'fadeInUp 0.5s ease-out';
@@ -941,29 +1202,30 @@ function renderSingleAlert(alertData, isNew) {
         <td class="user-id" style="font-weight:bold; color:#60a5fa;">${alertData.user_id}</td>
         <td class="score-value">${alertData.anomaly_score.toFixed(4)}</td>
         <td style="font-size:12px; padding: 12px 16px;">
-            <div style="font-weight: bold; color: #e2e8f0;">${alertData.description || 'Phát hiện hành vi dị thường so với baseline'}</div>
+            <div style="font-weight: bold; color: #e2e8f0;">${alertData.description || t('alert_desc_default')}</div>
             ${devHTML}
         </td>
     `;
     
     tbody.insertBefore(tr, tbody.firstChild);
-    
-    // Optional: play sound
-    // new Audio('/static/alert.mp3').play().catch(e=>{});
 }
 
 async function runOfflineProfile() {
-    if(!confirm("Chạy Baseline Profiling sẽ đọc toàn bộ log lịch sử và train lại model. Chạy ngay?")) return;
+    if(!confirm(t('confirm_profiling'))) return;
     const btn = document.querySelector('.btn-refresh[onclick="runOfflineProfile()"]');
-    btn.textContent = "⏳ Đang chạy...";
+    btn.textContent = t('profiling_running');
     try {
         const resp = await fetch('/api/offline/run', { method: 'POST' });
         const res = await resp.json();
-        alert(res.message || "Hoàn tất Profiling.");
+        alert(res.message || t('profiling_done'));
+        // Re-fetch live analysis data after model retrain
+        const data = await fetchData();
+        _lastDataHash = null;
+        renderAll(data);
     } catch(e) {
-        alert("Lỗi khi chạy profiling!");
+        alert(t('profiling_error'));
     } finally {
-        btn.textContent = "⚙️ Chạy Baseline Profiling";
+        btn.textContent = t('btn_run_profiling');
     }
 }
 
@@ -1006,16 +1268,15 @@ function applyDateFilter() {
     currentDateFrom = from || null;
     currentDateTo = to || null;
 
-    // Update filter badge
     const badge = document.getElementById('filterBadge');
     if (from && to) {
         badge.textContent = `${from} → ${to}`;
     } else if (from) {
-        badge.textContent = `Từ ${from}`;
+        badge.textContent = `${t('filter_from')}${from}`;
     } else if (to) {
-        badge.textContent = `Đến ${to}`;
+        badge.textContent = `${t('filter_to')}${to}`;
     } else {
-        badge.textContent = 'Tất cả';
+        badge.textContent = t('filter_all');
     }
 
     fetchHistory(currentDateFrom, currentDateTo);
@@ -1026,14 +1287,13 @@ function clearDateFilter() {
     document.getElementById('filterDateTo').value = '';
     currentDateFrom = null;
     currentDateTo = null;
-    document.getElementById('filterBadge').textContent = 'Tất cả';
+    document.getElementById('filterBadge').textContent = t('filter_all');
     fetchHistory(null, null);
 }
 
 function renderHistorySection(data) {
     if (!data) return;
 
-    // Stats mini cards
     const total = data.total || 0;
     const critical = data.stats?.severity?.CRITICAL || 0;
     const uniqueUsers = data.stats?.top_users?.labels?.length || 0;
@@ -1042,78 +1302,45 @@ function renderHistorySection(data) {
     document.getElementById('histCriticalCount').textContent = critical;
     document.getElementById('histUniqueUsers').textContent = uniqueUsers;
 
-    // Timeline chart
     renderHistoryTimeline(data.stats);
-    // Severity chart
     renderHistorySeverity(data.stats);
-    // Alert table
     renderHistoryAlertTable(data.alerts || []);
 }
 
 function renderHistoryTimeline(stats) {
     if (!stats || !stats.timeline_labels || stats.timeline_labels.length === 0) {
-        Plotly.newPlot('histTimelineChart', [], {
+        Plotly.react('histTimelineChart', [], {
             ...PLOTLY_LAYOUT_BASE,
-            annotations: [{
-                text: 'Chưa có dữ liệu cảnh báo',
-                xref: 'paper', yref: 'paper',
-                x: 0.5, y: 0.5, showarrow: false,
-                font: { size: 14, color: '#5a6478' }
-            }]
+            annotations: [{ text: t('no_history_data'), xref: 'paper', yref: 'paper', x: 0.5, y: 0.5, showarrow: false, font: { size: 14, color: '#5a6478' } }]
         }, PLOTLY_CONFIG);
         return;
     }
 
     const trace = {
-        x: stats.timeline_labels,
-        y: stats.timeline_values,
-        type: 'scatter',
-        mode: 'lines+markers',
-        fill: 'tozeroy',
+        x: stats.timeline_labels, y: stats.timeline_values,
+        type: 'scatter', mode: 'lines+markers', fill: 'tozeroy',
         fillcolor: 'rgba(59, 130, 246, 0.08)',
-        line: {
-            color: '#3b82f6',
-            width: 2.5,
-            shape: 'spline',
-        },
-        marker: {
-            color: '#3b82f6',
-            size: 6,
-            line: { width: 1, color: '#fff' },
-        },
-        hovertemplate: '<b>%{x}</b><br>Cảnh báo: %{y}<extra></extra>',
+        line: { color: '#3b82f6', width: 2.5, shape: 'spline' },
+        marker: { color: '#3b82f6', size: 6, line: { width: 1, color: '#fff' } },
+        hovertemplate: `<b>%{x}</b><br>${t('timeline_hover')}: %{y}<extra></extra>`,
     };
 
     const layout = {
         ...PLOTLY_LAYOUT_BASE,
-        xaxis: {
-            ...PLOTLY_LAYOUT_BASE.xaxis,
-            title: { text: 'Thời gian', font: { size: 11 } },
-            tickfont: { size: 9, family: 'JetBrains Mono' },
-            tickangle: -45,
-        },
-        yaxis: {
-            ...PLOTLY_LAYOUT_BASE.yaxis,
-            title: { text: 'Số cảnh báo', font: { size: 11 } },
-            dtick: 1,
-        },
+        xaxis: { ...PLOTLY_LAYOUT_BASE.xaxis, title: { text: t('timeline_x'), font: { size: 11 } }, tickfont: { size: 9, family: 'JetBrains Mono' }, tickangle: -45 },
+        yaxis: { ...PLOTLY_LAYOUT_BASE.yaxis, title: { text: t('timeline_y'), font: { size: 11 } }, dtick: 1 },
         showlegend: false,
         margin: { l: 48, r: 16, t: 16, b: 72 },
     };
 
-    Plotly.newPlot('histTimelineChart', [trace], layout, PLOTLY_CONFIG);
+    Plotly.react('histTimelineChart', [trace], layout, PLOTLY_CONFIG);
 }
 
 function renderHistorySeverity(stats) {
     if (!stats || (!stats.severity?.CRITICAL && !stats.severity?.HIGH)) {
-        Plotly.newPlot('histSeverityChart', [], {
+        Plotly.react('histSeverityChart', [], {
             ...PLOTLY_LAYOUT_BASE,
-            annotations: [{
-                text: 'Chưa có dữ liệu',
-                xref: 'paper', yref: 'paper',
-                x: 0.5, y: 0.5, showarrow: false,
-                font: { size: 14, color: '#5a6478' }
-            }]
+            annotations: [{ text: t('no_history_data'), xref: 'paper', yref: 'paper', x: 0.5, y: 0.5, showarrow: false, font: { size: 14, color: '#5a6478' } }]
         }, PLOTLY_CONFIG);
         return;
     }
@@ -1122,39 +1349,26 @@ function renderHistorySeverity(stats) {
     const highVal = stats.severity.HIGH || 0;
 
     const trace = {
-        labels: ['NGHIÊM TRỌNG', 'CẢNH BÁO'],
+        labels: [t('severity_critical'), t('severity_high')],
         values: [critVal, highVal],
-        type: 'pie',
-        hole: 0.55,
-        marker: {
-            colors: ['#ef4444', '#f97316'],
-            line: { color: '#111827', width: 2 },
-        },
+        type: 'pie', hole: 0.55,
+        marker: { colors: ['#ef4444', '#f97316'], line: { color: '#111827', width: 2 } },
         textinfo: 'label+value',
         textposition: 'outside',
         textfont: { size: 11, color: '#e8ecf4', family: 'Inter' },
-        hovertemplate: '<b>%{label}</b><br>Số lượng: %{value}<br>Tỷ lệ: %{percent}<extra></extra>',
+        hovertemplate: `<b>%{label}</b><br>${t('severity_count')}: %{value}<br>${t('severity_ratio')}: %{percent}<extra></extra>`,
         pull: [0.03, 0],
     };
 
     const layout = {
         ...PLOTLY_LAYOUT_BASE,
         showlegend: true,
-        legend: {
-            x: 0.5, y: -0.1, xanchor: 'center',
-            orientation: 'h',
-            bgcolor: 'rgba(0,0,0,0)',
-            font: { color: '#8b95a8', size: 11 },
-        },
+        legend: { x: 0.5, y: -0.1, xanchor: 'center', orientation: 'h', bgcolor: 'rgba(0,0,0,0)', font: { color: '#8b95a8', size: 11 } },
         margin: { l: 16, r: 16, t: 16, b: 40 },
-        annotations: [{
-            text: `<b>${critVal + highVal}</b><br>tổng`,
-            x: 0.5, y: 0.5, showarrow: false,
-            font: { size: 18, color: '#e8ecf4', family: 'JetBrains Mono' },
-        }],
+        annotations: [{ text: `<b>${critVal + highVal}</b><br>${t('severity_total')}`, x: 0.5, y: 0.5, showarrow: false, font: { size: 18, color: '#e8ecf4', family: 'JetBrains Mono' } }],
     };
 
-    Plotly.newPlot('histSeverityChart', [trace], layout, PLOTLY_CONFIG);
+    Plotly.react('histSeverityChart', [trace], layout, PLOTLY_CONFIG);
 }
 
 function renderHistoryAlertTable(alerts) {
@@ -1164,23 +1378,12 @@ function renderHistoryAlertTable(alerts) {
         tbody.innerHTML = `<tr><td colspan="5">
             <div class="no-data-placeholder">
                 <div class="no-data-icon">📭</div>
-                <div class="no-data-text">Không có cảnh báo trong khoảng thời gian này</div>
-                <div class="no-data-hint">Thử chọn khoảng ngày khác hoặc xem tất cả</div>
+                <div class="no-data-text">${t('no_history_range')}</div>
+                <div class="no-data-hint">${t('no_history_hint')}</div>
             </div>
         </td></tr>`;
         return;
     }
-
-    const FEATURE_NAMES_VI = {
-        "total_logins": "Số lần đăng nhập",
-        "off_hour_logins": "Đăng nhập ngoài giờ",
-        "total_usb_connects": "Số lần cắm USB",
-        "off_hour_usb": "Cắm USB ngoài giờ",
-        "total_emails": "Số email gửi đi",
-        "external_emails": "Gửi email ra ngoài (External)",
-        "total_file_access": "Số lần truy cập file",
-        "exe_zip_downloads": "Tải file EXE/ZIP"
-    };
 
     let html = '';
     alerts.forEach(a => {
@@ -1189,17 +1392,17 @@ function renderHistoryAlertTable(alerts) {
         if (Object.keys(deviations).length > 0) {
             devHTML = '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">';
             for (const [feat, data] of Object.entries(deviations)) {
-                const featVi = FEATURE_NAMES_VI[feat] || feat;
+                const featLabel = FEATURE_MAP[feat] || feat;
                 devHTML += `<div style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding:4px 8px;border-radius:0 4px 4px 0;">
-                    <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featVi}</span>
-                    <span style="font-size:10px;color:#94a3b8;"> — Ghi nhận: <b style="color:#fff">${data.observed}</b> (TB: ${data.mean} | ${data.deviation_sigma}σ)</span>
+                    <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featLabel}</span>
+                    <span style="font-size:10px;color:#94a3b8;"> — ${t('observed')}: <b style="color:#fff">${data.observed}</b> (${t('typical')}: ${data.mean} | ${data.deviation_sigma}σ)</span>
                 </div>`;
             }
             devHTML += '</div>';
         }
 
         const badgeClass = a.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
-        const severityLabel = a.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+        const severityLabel = a.severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
 
         html += `<tr>
             <td style="color:#8b95a8;white-space:nowrap;font-size:11px;">${a.timestamp}</td>
@@ -1207,7 +1410,7 @@ function renderHistoryAlertTable(alerts) {
             <td class="user-id" style="font-weight:bold;color:#60a5fa;">${a.user_id}</td>
             <td class="score-value" style="font-size:11px;">${a.anomaly_score?.toFixed(4) || '—'}</td>
             <td style="font-size:12px;padding:10px 14px;white-space:normal;">
-                <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${a.description || 'Phát hiện hành vi dị thường'}</div>
+                <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${a.description || t('alert_desc_default')}</div>
                 ${devHTML}
             </td>
         </tr>`;
@@ -1216,48 +1419,43 @@ function renderHistoryAlertTable(alerts) {
     tbody.innerHTML = html;
 }
 
-// When a new real-time alert arrives, also inject into the history tab
+let fetchHistoryThrottleTimer = null;
+function throttledFetchHistory() {
+    if (fetchHistoryThrottleTimer) return;
+    fetchHistoryThrottleTimer = setTimeout(() => {
+        fetchHistory(currentDateFrom, currentDateTo);
+        fetchHistoryThrottleTimer = null;
+    }, 2000);
+}
+
 function injectAlertIntoHistory(alertData) {
-    // If a date filter is active, check if this alert falls within range
     if (currentDateFrom || currentDateTo) {
         const alertDate = alertData.timestamp?.substring(0, 10);
         if (currentDateFrom && alertDate < currentDateFrom) return;
         if (currentDateTo && alertDate > currentDateTo) return;
     }
 
-    // Add to table
     const tbody = document.getElementById('histAlertsBody');
     if (tbody.querySelector('.no-data-placeholder')) {
         tbody.innerHTML = '';
     }
-
-    const FEATURE_NAMES_VI = {
-        "total_logins": "Số lần đăng nhập",
-        "off_hour_logins": "Đăng nhập ngoài giờ",
-        "total_usb_connects": "Số lần cắm USB",
-        "off_hour_usb": "Cắm USB ngoài giờ",
-        "total_emails": "Số email gửi đi",
-        "external_emails": "Gửi email ra ngoài (External)",
-        "total_file_access": "Số lần truy cập file",
-        "exe_zip_downloads": "Tải file EXE/ZIP"
-    };
 
     const deviations = alertData.deviations || {};
     let devHTML = '';
     if (Object.keys(deviations).length > 0) {
         devHTML = '<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">';
         for (const [feat, data] of Object.entries(deviations)) {
-            const featVi = FEATURE_NAMES_VI[feat] || feat;
+            const featLabel = FEATURE_MAP[feat] || feat;
             devHTML += `<div style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding:4px 8px;border-radius:0 4px 4px 0;">
-                <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featVi}</span>
-                <span style="font-size:10px;color:#94a3b8;"> — Ghi nhận: <b style="color:#fff">${data.observed}</b> (TB: ${data.mean} | ${data.deviation_sigma}σ)</span>
+                <span style="color:#fca5a5;font-weight:600;font-size:11px;">${featLabel}</span>
+                <span style="font-size:10px;color:#94a3b8;"> — ${t('observed')}: <b style="color:#fff">${data.observed}</b> (${t('typical')}: ${data.mean} | ${data.deviation_sigma}σ)</span>
             </div>`;
         }
         devHTML += '</div>';
     }
 
     const badgeClass = alertData.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
-    const severityLabel = alertData.severity === 'CRITICAL' ? 'NGHIÊM TRỌNG' : 'CẢNH BÁO';
+    const severityLabel = alertData.severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
 
     const tr = document.createElement('tr');
     tr.className = 'alert-row-new';
@@ -1267,13 +1465,12 @@ function injectAlertIntoHistory(alertData) {
         <td class="user-id" style="font-weight:bold;color:#60a5fa;">${alertData.user_id}</td>
         <td class="score-value" style="font-size:11px;">${alertData.anomaly_score?.toFixed(4) || '—'}</td>
         <td style="font-size:12px;padding:10px 14px;white-space:normal;">
-            <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${alertData.description || 'Phát hiện hành vi dị thường'}</div>
+            <div style="font-weight:600;color:#e2e8f0;font-size:11px;">${alertData.description || t('alert_desc_default')}</div>
             ${devHTML}
         </td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
 
-    // Update stats incrementally
     const totalEl = document.getElementById('histTotalAlerts');
     totalEl.textContent = parseInt(totalEl.textContent || '0') + 1;
     if (alertData.severity === 'CRITICAL') {
@@ -1281,8 +1478,7 @@ function injectAlertIntoHistory(alertData) {
         critEl.textContent = parseInt(critEl.textContent || '0') + 1;
     }
 
-    // Re-fetch history charts (lightweight, ensures accuracy)
-    fetchHistory(currentDateFrom, currentDateTo);
+    throttledFetchHistory();
 }
 
 // ===========================================================================
@@ -1297,11 +1493,15 @@ function injectAlertIntoHistory(alertData) {
 
 (async function init() {
     try {
+        // Initialize language (EN default)
+        changeLanguage('en');
+        
+        // Fetch live analysis data (from live log, NOT dataset)
         const data = await fetchData();
         renderAll(data);
         startAutoRefresh();
-        await fetchAlerts(); // Load historical alerts for Live Threat Feed tab
-        await fetchHistory(null, null); // Load all history for Lịch sử tab
+        await fetchAlerts();
+        await fetchHistory(null, null);
     } catch (e) {
         console.error('Init failed:', e);
     }
