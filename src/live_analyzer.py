@@ -17,6 +17,7 @@ import logging
 import hashlib
 
 import numpy as np
+import pandas as pd
 import joblib
 from sklearn.decomposition import PCA
 
@@ -40,7 +41,7 @@ FEATURE_ORDER = [
     "total_emails", "external_emails",
     "total_file_access", "exe_zip_downloads",
     "total_http_requests", "off_hour_http",
-    "o_score", "c_score", "e_score", "a_score", "n_score",
+    "o_score", "c_score", "e_score", "a_score", "n_score", "role_changes"
 ]
 
 # Features that can be extracted from live log events
@@ -50,6 +51,16 @@ LIVE_FEATURES = [
     "total_emails", "external_emails",
     "total_file_access", "exe_zip_downloads",
 ]
+
+POWERSHELL_EVENT_IDS = {40961, 40962, 4104}
+
+
+def is_exe_zip_activity(event: dict) -> bool:
+    if event.get("source") == "powershell" or event.get("event_id") in POWERSHELL_EVENT_IDS:
+        return False
+
+    fname = str(event.get("filename", "")).lower()
+    return ".exe" in fname or ".zip" in fname
 
 # Features that come from static baselines (psychometric, http, etc.)
 STATIC_FEATURES = [f for f in FEATURE_ORDER if f not in LIVE_FEATURES]
@@ -173,8 +184,7 @@ class LiveAnalyzer:
                         state["external_emails"] += 1
                 elif evt_type == "file":
                     state["total_file_access"] += 1
-                    fname = str(event.get("filename", "")).lower()
-                    if ".exe" in fname or ".zip" in fname:
+                    if is_exe_zip_activity(event):
                         state["exe_zip_downloads"] += 1
 
         logger.info("Parsed live log: %d users found", len(user_states))
@@ -289,7 +299,6 @@ class LiveAnalyzer:
             explained = np.array([0.0, 0.0])
 
         # Correlation matrix (replace NaN with 0.0 for valid JSON)
-        import pandas as pd
         df_features = pd.DataFrame(X, columns=FEATURE_ORDER)
         corr_matrix = df_features.corr().fillna(0.0).round(3)
 

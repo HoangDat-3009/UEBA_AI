@@ -282,7 +282,7 @@
                         <span class="chart-title-icon">📜</span>
                         <span data-i18n="hist_table_title">Detailed Alert History</span>
                     </div>
-                    <div class="chart-subtitle" data-i18n="hist_table_subtitle">All recorded alerts, updated real-time</div>
+                    <div class="chart-subtitle" data-i18n="hist_table_subtitle">Latest alerts, stats still include all records</div>
                 </div>
             </div>
 
@@ -325,6 +325,36 @@
                 <div class="card-value" id="rtDetectorStatus">—</div>
                 <div class="card-label" data-i18n="rt_status">Online Detector Status</div>
             </div>
+            <div class="summary-card card-normal">
+                <div class="card-icon">🖥️</div>
+                <div class="card-value" id="rtCollectorEvents">0</div>
+                <div class="card-label" data-i18n="rt_collector_events">Windows Events Collected</div>
+            </div>
+            <div class="summary-card card-rate">
+                <div class="card-icon">⏱️</div>
+                <div class="card-value" id="rtCollectorUptime" style="font-size:20px;">—</div>
+                <div class="card-label" data-i18n="rt_collector_uptime">Collector Uptime</div>
+            </div>
+        </div>
+
+        <!-- Collector controls -->
+        <div class="filter-bar" style="margin-bottom:16px;">
+            <div class="filter-label">
+                <span class="filter-icon">🖥️</span>
+                <span data-i18n="rt_collector_label">Windows Event Log Collector</span>
+            </div>
+            <div class="status-badge" id="collectorStatusBadge">
+                <div class="status-dot" id="collectorDot"></div>
+                <span id="collectorStatusText" data-i18n="rt_collector_running">Running</span>
+            </div>
+            <div class="filter-separator"></div>
+            <div class="filter-info" style="margin-left:0;">
+                <span data-i18n="rt_collector_channels">Channels:</span>
+                <span class="badge" id="collectorChannels">—</span>
+            </div>
+            <button class="btn-filter btn-filter-secondary" id="btnCollectorToggle" onclick="toggleCollector()">
+                ⏹ <span data-i18n="rt_collector_stop">Stop</span>
+            </button>
         </div>
         
         <div class="threats-section">
@@ -353,6 +383,25 @@
         </div>
     </div> <!-- End tabRealtime -->
 
+    <!-- ==================== ALERT DETAIL MODAL ==================== -->
+    <div class="alert-modal-overlay" id="alertModalOverlay" onclick="closeAlertDetail(event)">
+        <div class="alert-modal" onclick="event.stopPropagation()">
+            <div class="alert-modal-header">
+                <div class="alert-modal-title">
+                    <span class="alert-modal-icon">🔍</span>
+                    <span data-i18n="modal_title">Alert Investigation Detail</span>
+                </div>
+                <button class="alert-modal-close" onclick="closeAlertDetail()">&times;</button>
+            </div>
+            <div class="alert-modal-body" id="alertModalBody">
+                <div class="alert-modal-loading">
+                    <div class="spinner-ring"></div>
+                    <div data-i18n="modal_loading">Loading details...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== FOOTER ==================== -->
     <footer class="footer">
         UEBA Multi-Log Correlation Dashboard &bull; Powered by Isolation Forest &amp; PCA &bull; Built with ❤️ for SOC Analysts
@@ -371,6 +420,9 @@ let currentDateFrom = null;
 let currentDateTo = null;
 let currentLang = 'en';
 let _lastDataHash = null; // For skipping redundant renders
+let _currentTab = 'batch';
+let _batchNeedsUpdate = false; // Lazy update flag for batch tab
+let _historyNeedsUpdate = false;
 
 // ---------------------------------------------------------------------------
 // TRANSLATIONS — Complete EN/VI with clear separation
@@ -415,7 +467,7 @@ const TRANSLATIONS = {
         hist_severity_title: "Severity Distribution",
         hist_severity_subtitle: "CRITICAL vs HIGH ratio",
         hist_table_title: "Detailed Alert History",
-        hist_table_subtitle: "All recorded alerts, updated real-time",
+        hist_table_subtitle: "Latest alerts, stats still include all records",
         hist_col_time: "Timestamp",
         hist_col_severity: "Severity",
         hist_col_user: "User ID",
@@ -449,6 +501,8 @@ const TRANSLATIONS = {
         no_anomalies: "✅ No anomalous users detected with current threshold.",
         ws_connected: "Connected (Online)",
         ws_disconnected: "Disconnected (Offline)",
+        detector_running: "Running",
+        detector_stopped: "Stopped",
         no_db_alerts: "No alerts in DB. Listening for real-time logs...",
         no_history_data: "No alert data available",
         no_history_range: "No alerts in this time range",
@@ -467,8 +521,41 @@ const TRANSLATIONS = {
         severity_ratio: "Ratio",
         filter_from: "From ",
         filter_to: "To ",
+        rt_collector_events: "Windows Events Collected",
+        rt_collector_uptime: "Collector Uptime",
+        rt_collector_label: "Windows Event Log Collector",
+        rt_collector_running: "Running",
+        rt_collector_stopped: "Stopped",
+        rt_collector_channels: "Channels:",
+        rt_collector_stop: "Stop",
+        rt_collector_start: "Start",
+        modal_title: "🔍 Alert Investigation Detail",
+        modal_loading: "Loading details...",
+        modal_summary: "Alert Summary",
+        modal_user: "User ID",
+        modal_severity: "Severity",
+        modal_score: "Anomaly Score",
+        modal_time: "Timestamp",
+        modal_desc: "Description",
+        modal_assessment: "AI Risk Assessment",
+        modal_deviations: "Feature Deviation Analysis",
+        modal_baseline: "User Baseline Profile",
+        modal_raw_logs: "Raw Event Logs (±30s window)",
+        modal_no_logs: "No raw logs found in the time window.",
+        modal_no_baseline: "No baseline data available for this user.",
+        modal_risk_critical: "🚨 CRITICAL RISK — Immediate investigation required. Multiple behavioral indicators show significant deviation from established baseline.",
+        modal_risk_high: "⚠️ HIGH RISK — Elevated anomaly detected. User behavior deviates notably from historical patterns. Recommend review within 24 hours.",
+        modal_risk_model: "Triggered by: ML Model (Isolation Forest prediction = anomalous)",
+        modal_risk_baseline: "Triggered by: Baseline deviation (≥2 features exceeded 1.0σ threshold)",
+        modal_risk_highrisk: "Triggered by: High-risk feature deviation (≥2.0σ on sensitive features)",
+        modal_feat_observed: "Observed",
+        modal_feat_baseline_mean: "Baseline Mean",
+        modal_feat_baseline_std: "Baseline Std",
+        modal_feat_deviation: "Deviation",
     },
     vi: {
+        detector_running: "Dang chay",
+        detector_stopped: "Da dung",
         loading_text: "Đang phân tích dữ liệu...",
         header_title: "Bảng điều khiển phát hiện mối đe dọa nội bộ",
         header_subtitle: "Phân tích tương quan Multi-Log & Phát hiện bất thường — Bảo mật AI doanh nghiệp",
@@ -505,7 +592,7 @@ const TRANSLATIONS = {
         hist_severity_title: "Phân bố mức độ",
         hist_severity_subtitle: "Tỷ lệ CRITICAL / HIGH",
         hist_table_title: "Lịch sử cảnh báo chi tiết",
-        hist_table_subtitle: "Toàn bộ cảnh báo đã ghi nhận, cập nhật trực tiếp",
+        hist_table_subtitle: "Cảnh báo mới nhất, thống kê vẫn tính toàn bộ",
         hist_col_time: "Thời gian",
         hist_col_severity: "Mức độ",
         hist_col_user: "User ID",
@@ -557,6 +644,37 @@ const TRANSLATIONS = {
         severity_ratio: "Tỷ lệ",
         filter_from: "Từ ",
         filter_to: "Đến ",
+        rt_collector_events: "Số sự kiện Windows thu thập",
+        rt_collector_uptime: "Thời gian hoạt động",
+        rt_collector_label: "Thu thập Windows Event Log",
+        rt_collector_running: "Đang chạy",
+        rt_collector_stopped: "Đã dừng",
+        rt_collector_channels: "Kênh:",
+        rt_collector_stop: "Dừng",
+        rt_collector_start: "Bắt đầu",
+        modal_title: "🔍 Chi tiết điều tra cảnh báo",
+        modal_loading: "Đang tải chi tiết...",
+        modal_summary: "Tóm tắt cảnh báo",
+        modal_user: "User ID",
+        modal_severity: "Mức độ",
+        modal_score: "Điểm bất thường",
+        modal_time: "Thời gian",
+        modal_desc: "Mô tả",
+        modal_assessment: "Đánh giá rủi ro AI",
+        modal_deviations: "Phân tích sai lệch đặc trưng",
+        modal_baseline: "Hồ sơ Baseline người dùng",
+        modal_raw_logs: "Log sự kiện thô (cửa sổ ±30 giây)",
+        modal_no_logs: "Không tìm thấy log thô trong khoảng thời gian này.",
+        modal_no_baseline: "Chưa có dữ liệu baseline cho người dùng này.",
+        modal_risk_critical: "🚨 RỦI RO NGHIÊM TRỌNG — Cần điều tra ngay lập tức. Nhiều chỉ số hành vi lệch đáng kể so với baseline.",
+        modal_risk_high: "⚠️ RỦI RO CAO — Phát hiện dị thường nâng cao. Hành vi người dùng lệch rõ rệt khỏi mẫu lịch sử. Khuyến nghị xem xét trong 24 giờ.",
+        modal_risk_model: "Kích hoạt bởi: Mô hình ML (Isolation Forest dự đoán = bất thường)",
+        modal_risk_baseline: "Kích hoạt bởi: Sai lệch Baseline (≥2 đặc trưng vượt ngưỡng 1.0σ)",
+        modal_risk_highrisk: "Kích hoạt bởi: Sai lệch đặc trưng nguy cơ cao (≥2.0σ trên đặc trưng nhạy cảm)",
+        modal_feat_observed: "Ghi nhận",
+        modal_feat_baseline_mean: "Baseline TB",
+        modal_feat_baseline_std: "Baseline Std",
+        modal_feat_deviation: "Sai lệch",
     }
 };
 
@@ -695,6 +813,37 @@ const PLOTLY_CONFIG = {
     modeBarButtonsToRemove: ['lasso2d', 'select2d'],
     displaylogo: false,
 };
+
+const HISTORY_TABLE_LIMIT = 150;
+const MAX_LIVE_ALERT_ROWS = 80;
+const PLOT_RESIZE_IDS = ['pcaChart', 'radarChart', 'barChart', 'heatmapChart', 'histTimelineChart', 'histSeverityChart'];
+let tabResizeTimer = null;
+
+function trimTableRows(tbody, maxRows) {
+    while (tbody.rows.length > maxRows) {
+        tbody.deleteRow(tbody.rows.length - 1);
+    }
+}
+
+function schedulePlotResize() {
+    if (tabResizeTimer) return;
+
+    const runResize = () => {
+        tabResizeTimer = null;
+        PLOT_RESIZE_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.data && el.offsetParent !== null) {
+                Plotly.Plots.resize(el);
+            }
+        });
+    };
+
+    if ('requestIdleCallback' in window) {
+        tabResizeTimer = requestIdleCallback(runResize, { timeout: 500 });
+    } else {
+        tabResizeTimer = setTimeout(runResize, 120);
+    }
+}
 
 // ===========================================================================
 // Fetch Data — now from /api/live-analysis (live log, NOT dataset)
@@ -1051,12 +1200,14 @@ let isRealTimeSyncEnabled = true;
 let liveAlertsPollInterval = null;
 let wsConnected = false;
 
+let collectorPollInterval = null;
+let detectorPollInterval = null;
+
 function startAutoRefresh() {
     isRealTimeSyncEnabled = true;
-    // Fallback poll live alerts from DB every 15s — only if WebSocket is NOT connected
+    // Reconcile live alerts from DB every 15s. knownAlertIds prevents duplicates.
     if (!liveAlertsPollInterval) {
         liveAlertsPollInterval = setInterval(async () => {
-            if (wsConnected) return; 
             try {
                 await pollLiveAlerts();
             } catch (e) {
@@ -1064,16 +1215,144 @@ function startAutoRefresh() {
             }
         }, 15000);
     }
+
+    // Poll collector status every 3s
+    if (!collectorPollInterval) {
+        pollCollectorStatus();
+        collectorPollInterval = setInterval(pollCollectorStatus, 3000);
+    }
+
+    if (!detectorPollInterval) {
+        pollDetectorStatus();
+        detectorPollInterval = setInterval(pollDetectorStatus, 3000);
+    }
 }
 
 function stopAutoRefresh() {
     isRealTimeSyncEnabled = false;
     if (liveAlertsPollInterval) { clearInterval(liveAlertsPollInterval); liveAlertsPollInterval = null; }
+    if (collectorPollInterval) { clearInterval(collectorPollInterval); collectorPollInterval = null; }
+    if (detectorPollInterval) { clearInterval(detectorPollInterval); detectorPollInterval = null; }
 }
 
 document.getElementById('autoRefreshToggle').addEventListener('change', function () {
     if (this.checked) { startAutoRefresh(); } else { stopAutoRefresh(); }
 });
+
+// ===========================================================================
+// Collector Logic (Windows Event Log)
+// ===========================================================================
+let isCollectorRunning = false;
+// --- Smooth uptime counter (client-side tick every 1s) ---
+let _collectorUptimeSeconds = 0;   // latest known uptime in seconds
+let _collectorUptimeTimer = null;  // 1-second setInterval id
+
+function _parseUptimeToSeconds(str) {
+    // "H:MM:SS" or "M:SS" → total seconds
+    if (!str || str === '—') return 0;
+    const parts = str.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
+}
+
+function _formatUptime(totalSec) {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function _startUptimeTicker() {
+    if (_collectorUptimeTimer) return;           // already running
+    _collectorUptimeTimer = setInterval(() => {
+        if (!isCollectorRunning) return;
+        _collectorUptimeSeconds++;
+        document.getElementById('rtCollectorUptime').textContent =
+            _formatUptime(_collectorUptimeSeconds);
+    }, 1000);
+}
+
+function _stopUptimeTicker() {
+    if (_collectorUptimeTimer) { clearInterval(_collectorUptimeTimer); _collectorUptimeTimer = null; }
+}
+
+async function pollCollectorStatus() {
+    try {
+        const res = await fetch('/api/collector/status');
+        const data = await res.json();
+
+        isCollectorRunning = data.running;
+
+        // Re-sync uptime from server (authoritative value)
+        _collectorUptimeSeconds = _parseUptimeToSeconds(data.uptime);
+        document.getElementById('rtCollectorUptime').textContent =
+            isCollectorRunning ? _formatUptime(_collectorUptimeSeconds) : '—';
+
+        // Start or stop the smooth 1-second ticker
+        if (isCollectorRunning) { _startUptimeTicker(); } else { _stopUptimeTicker(); }
+
+        // Other UI elements
+        document.getElementById('rtCollectorEvents').textContent = data.total_events || 0;
+        document.getElementById('collectorChannels').textContent = data.channels ? data.channels.length : 0;
+
+        const badge = document.getElementById('collectorStatusBadge');
+        const text = document.getElementById('collectorStatusText');
+        const btn = document.getElementById('btnCollectorToggle');
+
+        if (isCollectorRunning) {
+            badge.className = 'status-badge status-active';
+            text.textContent = t('rt_collector_running');
+            btn.innerHTML = `⏹ ${t('rt_collector_stop')}`;
+            btn.className = 'btn-filter btn-filter-secondary';
+        } else {
+            badge.className = 'status-badge status-inactive';
+            text.textContent = t('rt_collector_stopped');
+            btn.innerHTML = `▶ ${t('rt_collector_start')}`;
+            btn.className = 'btn-filter btn-filter-primary';
+        }
+    } catch (e) {
+        console.error('Failed to poll collector status:', e);
+    }
+}
+
+async function toggleCollector() {
+    try {
+        const endpoint = isCollectorRunning ? '/api/collector/stop' : '/api/collector/start';
+        const res = await fetch(endpoint, { method: 'POST' });
+        const data = await res.json();
+        console.log('Collector toggle:', data);
+        pollCollectorStatus();
+        pollDetectorStatus();
+    } catch (e) {
+        console.error('Failed to toggle collector:', e);
+    }
+}
+
+// ===========================================================================
+// Detector Status Logic
+// ===========================================================================
+let isDetectorRunning = false;
+
+function renderDetectorStatus() {
+    const el = document.getElementById('rtDetectorStatus');
+    if (!wsConnected) {
+        el.textContent = t('ws_disconnected');
+    } else {
+        el.textContent = isDetectorRunning ? t('detector_running') : t('detector_stopped');
+    }
+}
+
+async function pollDetectorStatus() {
+    try {
+        const res = await fetch('/api/realtime/status');
+        const data = await res.json();
+        isDetectorRunning = !!data.running;
+        renderDetectorStatus();
+    } catch (e) {
+        console.error('Failed to poll detector status:', e);
+    }
+}
 
 // ===========================================================================
 // Real-time Logic (WebSocket)
@@ -1084,18 +1363,18 @@ let rtAlertCount = 0;
 socket.on('connect', () => {
     console.log('Connected to Real-time Stream');
     wsConnected = true;
-    document.getElementById('rtDetectorStatus').textContent = t('ws_connected');
+    pollDetectorStatus();
 });
 
 socket.on('disconnect', () => {
     wsConnected = false;
-    document.getElementById('rtDetectorStatus').textContent = t('ws_disconnected');
+    renderDetectorStatus();
 });
 
 let updateThrottleTimer = null;
 let pendingUpdate = false;
 
-// Lắng nghe sự kiện data_updated từ backend để cập nhật toàn bộ biểu đồ (< 0.2s)
+// Lắng nghe sự kiện data_updated từ backend để cập nhật toàn bộ biểu đồ
 socket.on('data_updated', async (data) => {
     if (!isRealTimeSyncEnabled) return;
     
@@ -1112,19 +1391,29 @@ socket.on('data_updated', async (data) => {
             pendingUpdate = false;
             executeUpdate();
         }
-    }, 1000); // Tối đa 1 lần vẽ/giây, giảm tải cho backend
+    }, 1000);
 });
 
 async function executeUpdate() {
     try {
         const newData = await fetchData();
-        renderAll(newData);
+        dashboardData = newData;
+        // Only render charts if batch tab is visible; otherwise defer
+        if (_currentTab === 'batch') {
+            renderAll(newData);
+        } else {
+            _batchNeedsUpdate = true;
+        }
     } catch (e) {
         console.error('Real-time sync error:', e);
     }
 }
 
 socket.on('new_alert', (alertData) => {
+    if (alertData.id) {
+        knownAlertIds.add(alertData.id);
+        if (alertData.id > lastKnownAlertId) lastKnownAlertId = alertData.id;
+    }
     renderSingleAlert(alertData, true);
     injectAlertIntoHistory(alertData);
 });
@@ -1165,11 +1454,19 @@ async function pollLiveAlerts() {
     }
 }
 
+// Global store for alert data (keyed by alert ID)
+let _alertDataStore = {};
+
 function renderSingleAlert(alertData, isNew) {
     if (isNew) {
         rtAlertCount++;
         document.getElementById('rtAlertCount').textContent = rtAlertCount;
     }
+
+    // Store alert data for popup lookup
+    const alertId = alertData.id || ('local_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+    alertData._storedId = alertId;
+    _alertDataStore[alertId] = alertData;
     
     const tbody = document.getElementById('rtAlertsBody');
     if(tbody.querySelector('td[colspan]')) {
@@ -1196,6 +1493,10 @@ function renderSingleAlert(alertData, isNew) {
     
     const tr = document.createElement('tr');
     tr.style.animation = 'fadeInUp 0.5s ease-out';
+    tr.style.cursor = 'pointer';
+    tr.title = 'Click to view details';
+    tr.setAttribute('data-alert-id', alertId);
+    tr.addEventListener('click', () => showAlertDetail(alertId));
     tr.innerHTML = `
         <td style="color:#8b95a8; white-space:nowrap;">${alertData.timestamp}</td>
         <td><span class="rank-badge ${badgeClass}">${severityLabel}</span></td>
@@ -1208,6 +1509,7 @@ function renderSingleAlert(alertData, isNew) {
     `;
     
     tbody.insertBefore(tr, tbody.firstChild);
+    trimTableRows(tbody, MAX_LIVE_ALERT_ROWS);
 }
 
 async function runOfflineProfile() {
@@ -1230,12 +1532,23 @@ async function runOfflineProfile() {
 }
 
 function switchTab(tabId) {
+    _currentTab = tabId;
     document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
     
     if(tabId === 'batch') {
         document.getElementById('tabBatch').classList.add('active');
         document.getElementById('btnTabBatch').classList.add('active');
+        // If data arrived while we were on the realtime tab, render it now
+        if (_batchNeedsUpdate && dashboardData) {
+            _lastDataHash = null;
+            renderAll(dashboardData);
+            _batchNeedsUpdate = false;
+        }
+        if (_historyNeedsUpdate) {
+            fetchHistory(currentDateFrom, currentDateTo);
+        }
+        schedulePlotResize();
     } else {
         document.getElementById('tabRealtime').classList.add('active');
         document.getElementById('btnTabRealtime').classList.add('active');
@@ -1248,7 +1561,7 @@ function switchTab(tabId) {
 
 async function fetchHistory(dateFrom, dateTo) {
     let url = '/api/alerts/history';
-    const params = [];
+    const params = [`limit=${HISTORY_TABLE_LIMIT}`];
     if (dateFrom) params.push(`from=${dateFrom}`);
     if (dateTo) params.push(`to=${dateTo}`);
     if (params.length > 0) url += '?' + params.join('&');
@@ -1257,6 +1570,10 @@ async function fetchHistory(dateFrom, dateTo) {
         const resp = await fetch(url);
         historyData = await resp.json();
         renderHistorySection(historyData);
+        _historyNeedsUpdate = false;
+        if (_currentTab === 'batch') {
+            schedulePlotResize();
+        }
     } catch (e) {
         console.error('Fetch history failed:', e);
     }
@@ -1386,7 +1703,7 @@ function renderHistoryAlertTable(alerts) {
     }
 
     let html = '';
-    alerts.forEach(a => {
+    alerts.slice(0, HISTORY_TABLE_LIMIT).forEach(a => {
         const deviations = a.feature_deviations || {};
         let devHTML = '';
         if (Object.keys(deviations).length > 0) {
@@ -1404,7 +1721,11 @@ function renderHistoryAlertTable(alerts) {
         const badgeClass = a.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
         const severityLabel = a.severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
 
-        html += `<tr>
+        const alertId = a.id || ('local_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+        a._storedId = alertId;
+        _alertDataStore[alertId] = a;
+
+        html += `<tr style="cursor:pointer;" title="Click to view details" data-alert-id="${alertId}" onclick="showAlertDetail('${alertId}')">
             <td style="color:#8b95a8;white-space:nowrap;font-size:11px;">${a.timestamp}</td>
             <td><span class="rank-badge ${badgeClass}" style="font-size:10px;width:auto;padding:4px 10px;">${severityLabel}</span></td>
             <td class="user-id" style="font-weight:bold;color:#60a5fa;">${a.user_id}</td>
@@ -1429,6 +1750,11 @@ function throttledFetchHistory() {
 }
 
 function injectAlertIntoHistory(alertData) {
+    if (_currentTab !== 'batch') {
+        _historyNeedsUpdate = true;
+        return;
+    }
+
     if (currentDateFrom || currentDateTo) {
         const alertDate = alertData.timestamp?.substring(0, 10);
         if (currentDateFrom && alertDate < currentDateFrom) return;
@@ -1457,8 +1783,16 @@ function injectAlertIntoHistory(alertData) {
     const badgeClass = alertData.severity === 'CRITICAL' ? 'rank-1' : 'rank-2';
     const severityLabel = alertData.severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
 
+    const alertId = alertData.id || ('local_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+    alertData._storedId = alertId;
+    _alertDataStore[alertId] = alertData;
+
     const tr = document.createElement('tr');
     tr.className = 'alert-row-new';
+    tr.style.cursor = 'pointer';
+    tr.title = 'Click to view details';
+    tr.setAttribute('data-alert-id', alertId);
+    tr.addEventListener('click', () => showAlertDetail(alertId));
     tr.innerHTML = `
         <td style="color:#8b95a8;white-space:nowrap;font-size:11px;">${alertData.timestamp}</td>
         <td><span class="rank-badge ${badgeClass}" style="font-size:10px;width:auto;padding:4px 10px;">${severityLabel}</span></td>
@@ -1470,6 +1804,7 @@ function injectAlertIntoHistory(alertData) {
         </td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
+    trimTableRows(tbody, HISTORY_TABLE_LIMIT);
 
     const totalEl = document.getElementById('histTotalAlerts');
     totalEl.textContent = parseInt(totalEl.textContent || '0') + 1;
@@ -1482,10 +1817,162 @@ function injectAlertIntoHistory(alertData) {
 }
 
 // ===========================================================================
+// Alert Detail Popup
+// ===========================================================================
+
+function closeAlertDetail(event) {
+    if (event && event.target !== document.getElementById('alertModalOverlay')) return;
+    document.getElementById('alertModalOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAlertDetail();
+});
+
+async function showAlertDetail(alertId) {
+    const overlay = document.getElementById('alertModalOverlay');
+    const modalBody = document.getElementById('alertModalBody');
+
+    modalBody.innerHTML = `<div class="alert-modal-loading"><div class="spinner-ring"></div><div>${t('modal_loading')}</div></div>`;
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    const storedAlert = _alertDataStore[alertId];
+
+    let detail = null;
+    if (typeof alertId === 'number' || (typeof alertId === 'string' && !alertId.startsWith('local_'))) {
+        try {
+            const res = await fetch(`/api/alert/${alertId}/detail`);
+            if (res.ok) detail = await res.json();
+        } catch (e) {
+            console.error('Failed to fetch alert detail:', e);
+        }
+    }
+
+    const alertInfo = detail ? detail.alert : storedAlert;
+    const rawLogs = detail ? detail.raw_logs : [];
+    const rawLogCount = detail ? detail.raw_log_count : 0;
+    const baseline = detail ? detail.baseline : {};
+
+    if (!alertInfo) {
+        modalBody.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-secondary);">Alert data not available.</div>`;
+        return;
+    }
+
+    const deviations = alertInfo.feature_deviations || alertInfo.deviations || {};
+    const severity = alertInfo.severity || 'HIGH';
+    const score = alertInfo.anomaly_score || 0;
+    const userId = alertInfo.user_id || alertInfo.user || '\u2014';
+    const timestamp = alertInfo.timestamp || '\u2014';
+    const description = alertInfo.description || t('alert_desc_default');
+
+    let html = '';
+
+    const sevClass = severity === 'CRITICAL' ? 'modal-severity-critical' : 'modal-severity-high';
+    const sevLabel = severity === 'CRITICAL' ? t('severity_critical') : t('severity_high');
+    html += `
+    <div class="modal-section">
+        <div class="modal-section-title">${t('modal_summary')}</div>
+        <div class="modal-summary-grid">
+            <div class="modal-summary-item">
+                <div class="modal-summary-label">${t('modal_user')}</div>
+                <div class="modal-summary-value" style="color:#60a5fa;font-size:18px;">${userId}</div>
+            </div>
+            <div class="modal-summary-item">
+                <div class="modal-summary-label">${t('modal_severity')}</div>
+                <div class="modal-summary-value"><span class="modal-sev-badge ${sevClass}">${sevLabel}</span></div>
+            </div>
+            <div class="modal-summary-item">
+                <div class="modal-summary-label">${t('modal_score')}</div>
+                <div class="modal-summary-value" style="color:#f87171;font-size:18px;">${typeof score === 'number' ? score.toFixed(4) : score}</div>
+            </div>
+            <div class="modal-summary-item">
+                <div class="modal-summary-label">${t('modal_time')}</div>
+                <div class="modal-summary-value" style="font-size:13px;">${timestamp}</div>
+            </div>
+        </div>
+        <div class="modal-description">${description}</div>
+    </div>`;
+
+    const riskText = severity === 'CRITICAL' ? t('modal_risk_critical') : t('modal_risk_high');
+    let triggerText = t('modal_risk_model');
+    if (description.toLowerCase().includes('high-risk')) triggerText = t('modal_risk_highrisk');
+    else if (description.toLowerCase().includes('baseline')) triggerText = t('modal_risk_baseline');
+
+    html += `
+    <div class="modal-section">
+        <div class="modal-section-title">${t('modal_assessment')}</div>
+        <div class="modal-assessment ${sevClass}">
+            <div class="modal-assessment-text">${riskText}</div>
+            <div class="modal-assessment-trigger">${triggerText}</div>
+        </div>
+    </div>`;
+
+    if (Object.keys(deviations).length > 0) {
+        html += `<div class="modal-section"><div class="modal-section-title">${t('modal_deviations')}</div>
+            <div class="modal-deviations-table"><table><thead><tr>
+                <th style="width:30%">Feature</th><th>${t('modal_feat_observed')}</th>
+                <th>${t('modal_feat_baseline_mean')}</th><th>${t('modal_feat_baseline_std')}</th>
+                <th>${t('modal_feat_deviation')}</th></tr></thead><tbody>`;
+        for (const [feat, dv] of Object.entries(deviations)) {
+            const featLabel = FEATURE_MAP[feat] || feat;
+            const devSigma = dv.deviation_sigma || 0;
+            const barW = Math.min(devSigma / 5 * 100, 100);
+            const barC = devSigma >= 3 ? '#ef4444' : devSigma >= 2 ? '#f97316' : '#eab308';
+            html += `<tr><td style="font-weight:600;color:#e2e8f0;">${featLabel}</td>
+                <td style="color:#f87171;font-weight:700;">${dv.observed}</td><td>${dv.mean}</td>
+                <td>${baseline[feat] ? baseline[feat].std : '\u2014'}</td>
+                <td><div style="display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:8px;overflow:hidden;">
+                        <div style="width:${barW}%;height:100%;background:${barC};border-radius:4px;"></div></div>
+                    <span style="color:${barC};font-weight:700;min-width:45px;">${devSigma}\u03c3</span>
+                </div></td></tr>`;
+        }
+        html += `</tbody></table></div></div>`;
+    }
+
+    if (Object.keys(baseline).length > 0) {
+        html += `<div class="modal-section"><div class="modal-section-title">${t('modal_baseline')}</div><div class="modal-baseline-grid">`;
+        for (const [feat, bv] of Object.entries(baseline)) {
+            const featLabel = FEATURE_MAP[feat] || feat;
+            html += `<div class="modal-baseline-item"><div class="modal-baseline-feat">${featLabel}</div>
+                <div class="modal-baseline-vals"><span>\u03bc = ${bv.mean}</span><span>\u03c3 = ${bv.std}</span></div></div>`;
+        }
+        html += `</div></div>`;
+    } else {
+        html += `<div class="modal-section"><div class="modal-section-title">${t('modal_baseline')}</div>
+            <div style="color:var(--text-secondary);font-size:13px;padding:12px 0;">${t('modal_no_baseline')}</div></div>`;
+    }
+
+    html += `<div class="modal-section"><div class="modal-section-title">${t('modal_raw_logs')} <span style="color:var(--text-secondary);font-weight:400;">(${rawLogCount} events)</span></div>`;
+    if (rawLogs.length > 0) {
+        html += `<div class="modal-raw-logs">`;
+        rawLogs.forEach(logEvt => {
+            const logStr = JSON.stringify(logEvt, null, 2);
+            const evtType = logEvt.type || 'unknown';
+            const tColors = { 'logon': '#22c55e', 'device': '#f97316', 'file': '#a78bfa', 'email': '#38bdf8' };
+            const tColor = tColors[evtType] || '#94a3b8';
+            html += `<div class="modal-log-entry"><div class="modal-log-header">
+                <span class="modal-log-time">${logEvt.timestamp || '\u2014'}</span>
+                <span class="modal-log-type" style="background:${tColor}20;color:${tColor};">${evtType.toUpperCase()}</span>
+                ${logEvt.source ? `<span class="modal-log-source">${logEvt.source}</span>` : ''}
+                ${logEvt.event_id ? `<span class="modal-log-eid">EID: ${logEvt.event_id}</span>` : ''}
+            </div><pre class="modal-log-json">${logStr}</pre></div>`;
+        });
+        html += `</div>`;
+    } else {
+        html += `<div style="color:var(--text-secondary);font-size:13px;padding:12px 0;">${t('modal_no_logs')}</div>`;
+    }
+    html += `</div>`;
+
+    modalBody.innerHTML = html;
+}
+
+// ===========================================================================
 // Init
 // ===========================================================================
 
-// Set default date filter to today
 (function setDefaultDates() {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('filterDateTo').value = today;
@@ -1493,15 +1980,14 @@ function injectAlertIntoHistory(alertData) {
 
 (async function init() {
     try {
-        // Initialize language (EN default)
         changeLanguage('en');
-        
-        // Fetch live analysis data (from live log, NOT dataset)
-        const data = await fetchData();
+        const [data, , ] = await Promise.all([
+            fetchData(),
+            fetchAlerts(),
+            fetchHistory(null, null),
+        ]);
         renderAll(data);
         startAutoRefresh();
-        await fetchAlerts();
-        await fetchHistory(null, null);
     } catch (e) {
         console.error('Init failed:', e);
     }
@@ -1510,3 +1996,4 @@ function injectAlertIntoHistory(alertData) {
 
 </body>
 </html>
+

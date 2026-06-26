@@ -23,6 +23,20 @@ live_feature_names = [
     "total_emails", "external_emails", "total_file_access", "exe_zip_downloads"
 ]
 
+BASELINE_DEVIATION_SIGMA = 1.0
+MIN_DEVIANT_FEATURES = 2
+HIGH_RISK_DEVIATION_SIGMA = 2.0
+HIGH_RISK_FEATURES = {"exe_zip_downloads", "off_hour_logins", "off_hour_usb"}
+POWERSHELL_EVENT_IDS = {40961, 40962, 4104}
+
+
+def is_exe_zip_activity(event):
+    if event.get("source") == "powershell" or event.get("event_id") in POWERSHELL_EVENT_IDS:
+        return False
+
+    fname = str(event.get("filename", "")).lower()
+    return ".exe" in fname or ".zip" in fname
+
 class OnlineDetector:
     def __init__(self, socketio_ext=None):
         self.socketio = socketio_ext
@@ -40,6 +54,15 @@ class OnlineDetector:
         
         self.load_models()
         self.load_baselines()
+
+    def get_baseline(self, user, feature_name):
+        base = self.baselines.get(user, {}).get(feature_name)
+        if not base:
+            base = self.global_baselines.get(feature_name, {"mean": 0, "std": 1})
+
+        mean = base.get("mean", 0)
+        std = max(base.get("std", 1) or 1, 1.0)
+        return mean, std
 
     def load_models(self):
         try:
@@ -116,8 +139,7 @@ class OnlineDetector:
             if event.get("external"): state["external_emails"] += 1
         elif evt_type == "file":
             state["total_file_access"] += 1
-            fname = str(event.get("filename", "")).lower()
-            if ".exe" in fname or ".zip" in fname:
+            if is_exe_zip_activity(event):
                 state["exe_zip_downloads"] += 1
                 
         return user
@@ -151,20 +173,20 @@ class OnlineDetector:
 
         # Method 2: Baseline deviation check (>1.0σ on at least 2 features)
         deviation_count = 0
+        max_high_risk_deviation = 0.0
         for fname in self.live_feature_names:
             val = state.get(fname, 0)
-            base = self.baselines.get(user, {}).get(fname)
-            if not base:
-                base = self.global_baselines.get(fname, {"mean": 0, "std": 1})
-            mean = base["mean"]
-            std = max(base["std"], 1.0)
+            mean, std = self.get_baseline(user, fname)
             dev = abs(val - mean) / std
-            if dev > 1.0:
+            if dev > BASELINE_DEVIATION_SIGMA:
                 deviation_count += 1
+            if fname in HIGH_RISK_FEATURES:
+                max_high_risk_deviation = max(max_high_risk_deviation, dev)
 
-        baseline_triggered = (deviation_count >= 2)
+        baseline_triggered = (deviation_count >= MIN_DEVIANT_FEATURES)
+        high_risk_triggered = (max_high_risk_deviation >= HIGH_RISK_DEVIATION_SIGMA)
 
-        if model_triggered or baseline_triggered:
+        if model_triggered or baseline_triggered or high_risk_triggered:
             # Check cooldown (avoid spamming alerts)
             now = time.time()
             last_time = self.last_alert_time.get(user, 0)
@@ -172,11 +194,16 @@ class OnlineDetector:
                 return
                 
             self.last_alert_time[user] = now
-            trigger_reason = "model" if model_triggered else "baseline_deviation"
+            if model_triggered:
+                trigger_reason = "model"
+            elif baseline_triggered:
+                trigger_reason = "baseline_deviation"
+            else:
+                trigger_reason = "high_risk_deviation"
             logger.info(f"Alert triggered for {user} | reason={trigger_reason} | score={score:.4f} | devs={deviation_count}")
-            self.trigger_alert(user, score, vector)
+            self.trigger_alert(user, score, vector, trigger_reason)
 
-    def trigger_alert(self, user, score, vector):
+    def trigger_alert(self, user, score, vector, trigger_reason=None):
         severity = "CRITICAL" if score < -0.2 else "HIGH"
         
         # Calculate deviations for explainability
@@ -185,17 +212,15 @@ class OnlineDetector:
             if fname not in self.live_feature_names:
                 continue
             val = vector[i]
-            base = self.baselines.get(user, {}).get(fname)
-            if not base:
-                base = self.global_baselines.get(fname, {"mean": 0, "std": 1})
-            
-            mean = base["mean"]
-            std = base["std"]
+            mean, std = self.get_baseline(user, fname)
             dev = abs(val - mean) / std
             if dev > 2.0:  # More than 2 sigma
                 deviations[fname] = {"observed": val, "mean": round(mean, 2), "deviation_sigma": round(dev, 2)}
                 
-        desc = f"Anomalous behavior detected. Score: {score:.4f}"
+        if trigger_reason == "high_risk_deviation":
+            desc = f"High-risk behavior deviated from baseline. Score: {score:.4f}"
+        else:
+            desc = f"Anomalous behavior detected. Score: {score:.4f}"
         
         # Save to DB
         try:

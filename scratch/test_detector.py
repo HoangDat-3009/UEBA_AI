@@ -5,6 +5,7 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_dir = os.path.normpath(os.path.join(_script_dir, ".."))
 sys.path.insert(0, os.path.join(_project_dir, "src"))
 
+# pyrefly: ignore [missing-import]
 from online_detector import OnlineDetector
 import json
 
